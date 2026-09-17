@@ -37,7 +37,7 @@ function checkAllLoaded() {
     if (loadedImagesCount === assets.length) requestAnimationFrame(gameLoop);
 }
 
-// === B. ĐIỀU KHIỂN ===
+// === B. ĐIỀU KHIỂN BÀN PHÍM ===
 const keys = {};
 window.addEventListener('keydown', event => {
     const key = event.key.toLowerCase();
@@ -50,7 +50,7 @@ window.addEventListener('keyup', event => {
     keys[event.key.toLowerCase()] = false;
 });
 
-// === C. THẾ GIỚI & PLAYER ===
+// === C. THẾ GIỚI VÔ HẠN & PLAYER ===
 const PLAYER_SPEED = 180;
 const FRAME_DURATION = 1000 / 8;
 const TILE_SIZE = 64;
@@ -58,11 +58,11 @@ const CHUNK_SIZE = 512;
 const TREE_MARGIN = 90;
 const generatedChunks = new Map();
 
-// Tọa độ đo chính xác từ player_walk_new.png (1774x887).
-// 86px đầu tiên là vùng nhãn; nhân vật bắt đầu tại x=86.
+// Tọa độ đo chính xác từ ảnh player_walk_new.png:
+// full size = 1774 x 887
+// bỏ 86px đầu tiên bên trái (vùng nhãn)
+// frame = 208 x 219
 const SPRITE = {
-    sheetWidth: 1774,
-    sheetHeight: 887,
     startX: 86,
     frameWidth: 208,
     frameHeight: 219,
@@ -183,7 +183,7 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-// === E. CẬP NHẬT ===
+// === E. CẬP NHẬT LOGIC ===
 function update(dt) {
     let dx = 0;
     let dy = 0;
@@ -217,7 +217,7 @@ function update(dt) {
         }
     }
 
-    // 8 frame/giây: mỗi frame hiển thị 125ms.
+    // 8 FPS: luôn chuyển frame đều 125ms/lần
     if (player.isMoving) {
         player.animTimer += dt * 1000;
         while (player.animTimer >= FRAME_DURATION) {
@@ -233,7 +233,7 @@ function update(dt) {
     camera.y = player.y + player.height / 2 - canvas.height / 2;
 }
 
-// === F. VẼ ===
+// === F. VẼ THẾ GIỚI ===
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
