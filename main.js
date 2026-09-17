@@ -6,10 +6,8 @@ ctx.imageSmoothingEnabled = false;
 const images = {};
 let loadedImagesCount = 0;
 const assets = [
-    // Ảnh cỏ mới: đặt tại assets/environment/grass_new.png
-    ['grass', 'assets/environment/grass_new.png', '#48a048', 1254, 1254],
+    ['grass', 'assets/environment/grass.png', '#48a048', 64, 64],
     ['tree', 'assets/environment/tree.png', '#2E8B57', 64, 96],
-    // Sprite mới có kích thước 1776x896, gồm 4 hàng x 8 frame.
     ['player', 'assets/sprites/player_walk_new.png', '#00aaff', 1776, 896]
 ];
 
@@ -56,16 +54,9 @@ window.addEventListener('keyup', event => {
 const PLAYER_SPEED = 180;
 const FRAME_DURATION = 1000 / 8;
 const TILE_SIZE = 64;
-const GRASS_TEXTURE_SIZE = 512;
 const CHUNK_SIZE = 512;
 const TREE_MARGIN = 90;
 const generatedChunks = new Map();
-
-// Sprite mới: phần nhãn ở 128px đầu tiên được bỏ qua.
-// Vùng còn lại có 8 cột, 4 hàng; mỗi frame khoảng 206x224px.
-const SPRITE_OFFSET_X = 128;
-const SPRITE_FRAME_WIDTH = 206;
-const SPRITE_FRAME_HEIGHT = 224;
 
 const player = {
     x: 368,
@@ -184,10 +175,9 @@ function update(dt) {
         if (trees.some(tree => checkAABB(playerBox, getHitbox(tree)))) player.y -= movement;
     }
 
-    // Chính xác 8 frame/giây; mỗi lần chuyển frame sẽ sang frame kế tiếp.
     if (player.isMoving) {
         player.animTimer += dt * 1000;
-        while (player.animTimer >= FRAME_DURATION) {
+        if (player.animTimer >= FRAME_DURATION) {
             player.frameIndex = (player.frameIndex + 1) % 8;
             player.animTimer -= FRAME_DURATION;
         }
@@ -204,12 +194,12 @@ function update(dt) {
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Dùng toàn bộ texture cỏ mới làm nền lớn, tránh lặp từng ô 64x64.
-    const firstGrassX = Math.floor(camera.x / GRASS_TEXTURE_SIZE) * GRASS_TEXTURE_SIZE;
-    const firstGrassY = Math.floor(camera.y / GRASS_TEXTURE_SIZE) * GRASS_TEXTURE_SIZE;
-    for (let worldX = firstGrassX; worldX < camera.x + canvas.width + GRASS_TEXTURE_SIZE; worldX += GRASS_TEXTURE_SIZE) {
-        for (let worldY = firstGrassY; worldY < camera.y + canvas.height + GRASS_TEXTURE_SIZE; worldY += GRASS_TEXTURE_SIZE) {
-            ctx.drawImage(images.grass.img, worldX - camera.x, worldY - camera.y, GRASS_TEXTURE_SIZE, GRASS_TEXTURE_SIZE);
+    const firstTileX = Math.floor(camera.x / TILE_SIZE) * TILE_SIZE;
+    const firstTileY = Math.floor(camera.y / TILE_SIZE) * TILE_SIZE;
+    const grassAsset = images.grass;
+    for (let worldX = firstTileX; worldX < camera.x + canvas.width + TILE_SIZE; worldX += TILE_SIZE) {
+        for (let worldY = firstTileY; worldY < camera.y + canvas.height + TILE_SIZE; worldY += TILE_SIZE) {
+            ctx.drawImage(grassAsset.img, worldX - camera.x, worldY - camera.y, TILE_SIZE, TILE_SIZE);
         }
     }
 
@@ -227,13 +217,13 @@ function render() {
             const screenX = player.x - camera.x;
             const screenY = player.y - camera.y;
             if (images.player.loaded) {
-                const sourceX = SPRITE_OFFSET_X + player.frameIndex * SPRITE_FRAME_WIDTH;
-                const sourceY = player.direction * SPRITE_FRAME_HEIGHT;
-                ctx.drawImage(
-                    images.player.img,
-                    sourceX, sourceY, SPRITE_FRAME_WIDTH, SPRITE_FRAME_HEIGHT,
-                    screenX, screenY, player.width, player.height
-                );
+                const spriteSheet = images.player.img;
+                const frameW = 1776 / 8;
+                const frameH = 896 / 4;
+                const sx = player.frameIndex * frameW;
+                const sy = player.direction * frameH;
+
+                ctx.drawImage(spriteSheet, sx, sy, frameW, frameH, screenX, screenY, 64, 64);
             } else {
                 ctx.fillStyle = '#00aaff';
                 ctx.fillRect(screenX, screenY, player.width, player.height);
