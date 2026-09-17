@@ -58,20 +58,21 @@ const CHUNK_SIZE = 512;
 const TREE_MARGIN = 90;
 const generatedChunks = new Map();
 
-// Thông số đo trực tiếp từ player_walk_new.png (1774x887).
-// Bỏ 86px đầu bên trái chứa nhãn điều khiển.
+// Tọa độ đo chính xác từ player_walk_new.png (1774x887).
+// 86px đầu tiên là vùng nhãn; nhân vật bắt đầu tại x=86.
 const SPRITE = {
-    left: 86,
+    sheetWidth: 1774,
+    sheetHeight: 887,
+    startX: 86,
     frameWidth: 208,
     frameHeight: 219,
     columns: 8,
     rows: {
-        down: 0,
-        left: 1,
-        right: 2,
-        up: 3
-    },
-    rowY: [1, 220, 439, 658]
+        down: 1,
+        left: 220,
+        right: 439,
+        up: 658
+    }
 };
 
 const player = {
@@ -153,10 +154,19 @@ function checkAABB(rect1, rect2) {
         rect1.y + rect1.height > rect2.y;
 }
 
-function getSpriteFrame(direction, frameIndex) {
+function getFrameCoords(direction, frameIndex) {
+    const baseY = SPRITE.rows[direction];
+
+    if (baseY === undefined) {
+        throw new Error(`Invalid direction: ${direction}`);
+    }
+    if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= SPRITE.columns) {
+        throw new Error(`Frame index ${frameIndex} out of range (0-7)`);
+    }
+
     return {
-        sx: SPRITE.left + frameIndex * SPRITE.frameWidth,
-        sy: SPRITE.rowY[SPRITE.rows[direction]],
+        sx: SPRITE.startX + frameIndex * SPRITE.frameWidth,
+        sy: baseY,
         sw: SPRITE.frameWidth,
         sh: SPRITE.frameHeight
     };
@@ -207,7 +217,7 @@ function update(dt) {
         }
     }
 
-    // Chuyển frame chính xác mỗi 125ms = 8 frame/giây.
+    // 8 frame/giây: mỗi frame hiển thị 125ms.
     if (player.isMoving) {
         player.animTimer += dt * 1000;
         while (player.animTimer >= FRAME_DURATION) {
@@ -252,7 +262,7 @@ function render() {
             const screenY = player.y - camera.y;
 
             if (images.player.loaded) {
-                const frame = getSpriteFrame(player.direction, player.frameIndex);
+                const frame = getFrameCoords(player.direction, player.frameIndex);
                 ctx.drawImage(
                     images.player.img,
                     frame.sx, frame.sy, frame.sw, frame.sh,
