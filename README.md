@@ -106,7 +106,7 @@ Rìu, cuốc và đuốc chỉ cần chế tạo một lần. Mỗi loại vật
 
 ```sh
 npm ci
-npm test                 # 65 kiểm thử logic bằng node:test
+npm test                 # 67 kiểm thử logic bằng node:test
 npm run perf             # đo thời gian xử lý mỗi bước và truy vấn vật thể
 npm run perf:check       # thoát mã lỗi nếu vượt ngân sách hiệu năng
 npm run balance          # mô phỏng nhịp chơi, in báo cáo cân bằng

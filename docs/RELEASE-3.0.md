@@ -16,7 +16,7 @@ phần nói rõ **điều gì đã được kiểm chứng và điều gì chưa
 
 | Nội dung                                 | Kết quả                                                                                  |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `npm test` (65 kiểm thử logic)           | Đạt: game, thế giới, lưu trữ, cài đặt, hợp đồng HTML/mã/icon, hiệu năng, nạp bản lưu 2.0 |
+| `npm test` (67 kiểm thử logic)           | Đạt: game, thế giới, lưu trữ, cài đặt, hợp đồng HTML/mã/icon, hiệu năng, nạp bản lưu 2.0 |
 | `npm run perf:check`                     | Đạt, xem số đo trong `docs/PERFORMANCE.md`                                               |
 | `npm run balance`                        | Chạy được, số đo trong `docs/BALANCE.md`                                                 |
 | `npm run format:check`                   | Đạt                                                                                      |
@@ -25,16 +25,29 @@ phần nói rõ **điều gì đã được kiểm chứng và điều gì chưa
 
 ## 3. Chưa kiểm chứng (cần bạn xác nhận)
 
-- **Chưa chạy bộ kiểm thử trình duyệt trong môi trường soạn bản** vì không tải được Chromium ở đó;
-  bộ này sẽ chạy trên GitHub Actions khi mở pull request. Nếu CI báo lỗi, sửa trước khi gộp.
 - **Chưa thử trên điện thoại thật.** Mô phỏng kích thước màn hình trong kiểm thử không thay thế
   thiết bị thật. Roadmap yêu cầu ít nhất một máy Android/Chrome và một iPhone/Safari trước khi
   khẳng định hỗ trợ — việc đó vẫn đang chờ.
 - **Chưa đo FPS thật trong trình duyệt** (xem mục cuối của `docs/PERFORMANCE.md`).
 
+## 3b. Ghi chú: lần chạy CI đầu tiên đã tìm ra hai lỗi
+
+Bộ kiểm thử trình duyệt không chạy được trong môi trường soạn bản (không tải được Chromium), nên
+lần chạy đầu tiên trên GitHub Actions đã đỏ ở 16/20 kịch bản. CI báo về hai nguyên nhân thật, cả hai
+đều được sửa và giờ đã xanh:
+
+1. `Renderer` vừa có trường `decorationBuckets` vừa có phương thức cùng tên, nên khung hình đầu tiên
+   ném lỗi và game không vẽ gì cả. Đã đổi tên trường cache thành `decorationCache`.
+2. Thanh trượt âm lượng dùng thang 0–100 còn giá trị lưu là 0–1, nên chạm vào thanh trượt là nhảy
+   lên 100%. Hai phép đổi đơn vị đã được tách thành `volumeToPercent`/`percentToVolume` trong
+   `src/settings.js`, có kiểm thử logic và một kiểm thử hợp đồng khóa đúng dải giá trị của thanh trượt.
+
+Bài học giữ lại: khi không chạy được trình duyệt tại máy, hãy mở pull request sớm để CI chạy thay.
+
 ## 4. Việc cần làm trước khi gộp
 
-- [ ] CI trên pull request xanh (định dạng, 65 kiểm thử logic, 20 kịch bản trình duyệt).
+- [x] CI trên pull request xanh (định dạng, 67 kiểm thử logic, ngân sách hiệu năng, báo cáo cân
+      bằng, 20 kịch bản trình duyệt).
 - [ ] Mở bản xem trước, chơi thử: mới → hái quả → chế tạo rìu → chặt cây → lửa trại → qua một đêm.
 - [ ] Mở Cài đặt (`O`), thử âm lượng, âm thanh môi trường, giảm chuyển động, bảng thông số; tải lại
       trang và kiểm tra cài đặt còn nguyên.

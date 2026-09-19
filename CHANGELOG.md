@@ -60,10 +60,12 @@ trình vẫn đang chờ, xem `docs/ROADMAP.md`.
 
 ### Kiểm thử và tài liệu
 
-- Bộ kiểm thử logic: 42 → **65** kiểm thử, gồm cài đặt, hợp đồng giữa HTML/mã/icon, chỉ mục công
+- Bộ kiểm thử logic: 42 → **67** kiểm thử, gồm cài đặt, hợp đồng giữa HTML/mã/icon, chỉ mục công
   trình và khả năng nạp bản lưu 2.0.
 - Bộ kiểm thử trình duyệt: 14 → **20** kịch bản, gồm cài đặt, phản hồi bị từ chối, bảng thông số và
-  bố cục điện thoại.
+  bố cục điện thoại. Lần chạy CI đầu tiên của bản này đã phát hiện hai lỗi thật (trường cache che
+  phương thức trong `renderer.js`, và thang 0–100 so với 0–1 của thanh trượt âm lượng); cả hai đã
+  được sửa trước khi phát hành.
 - Thêm `README.md` cập nhật, `docs/PERFORMANCE.md`, `docs/BALANCE.md`, `docs/RELEASE-3.0.md`.
 
 ### Còn thiếu so với lộ trình

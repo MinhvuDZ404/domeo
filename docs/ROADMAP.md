@@ -18,7 +18,7 @@ năng và tài liệu kiểm thử mang lại giá trị ngay mà không phải 
 | v2.3 — Khu rừng rộng hơn      | **Chưa làm.** Chưa có vùng sinh thái, bản đồ hay địa điểm.                                                                                                                                                                                                                                |
 | v2.4 — Một hành trình có đích | **Chưa làm.** Mục tiêu khởi đầu vẫn là danh sách 5 bước, chưa thành hệ thống nhiệm vụ.                                                                                                                                                                                                    |
 | v2.5 — Hiểm nguy trong rừng   | **Chưa làm** và vẫn là hạng mục tùy chọn.                                                                                                                                                                                                                                                 |
-| v3.0 — Bản hoàn thiện         | **Đã làm một phần:** cài đặt trong game (âm lượng, âm thanh môi trường, giảm chuyển động, hiệu ứng), phản hồi khi hành động và khi bị từ chối, thang màu ngày–đêm, tối ưu vẽ và truy vấn, công cụ đo hiệu năng/cân bằng, 65 kiểm thử logic + 20 kịch bản trình duyệt, tài liệu phát hành. |
+| v3.0 — Bản hoàn thiện         | **Đã làm một phần:** cài đặt trong game (âm lượng, âm thanh môi trường, giảm chuyển động, hiệu ứng), phản hồi khi hành động và khi bị từ chối, thang màu ngày–đêm, tối ưu vẽ và truy vấn, công cụ đo hiệu năng/cân bằng, 67 kiểm thử logic + 20 kịch bản trình duyệt, tài liệu phát hành. |
 
 Còn **hai điều kiện của giai đoạn 6 chưa đạt**, và tài liệu này giữ nguyên chúng như việc phải làm:
 
@@ -58,7 +58,7 @@ Ba nguyên tắc:
 - Lưu/tiếp tục bằng `localStorage`; điều khiển bàn phím và cảm ứng.
 - Kiến trúc module, CI và bộ kiểm thử hiện có gồm 42 kiểm thử logic, 14 kiểm thử trình duyệt.
 - Từ 3.0: cài đặt người chơi lưu riêng, âm thanh môi trường, phản hồi hành động, công cụ đo hiệu
-  năng (`npm run perf`) và đo cân bằng (`npm run balance`), nâng lên 65 kiểm thử logic và 20 kịch
+  năng (`npm run perf`) và đo cân bằng (`npm run balance`), nâng lên 67 kiểm thử logic và 20 kịch
   bản trình duyệt.
 
 ### Khoảng trống chính
