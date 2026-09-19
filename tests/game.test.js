@@ -213,3 +213,57 @@ test('a new run resets inventory, goals, resources, structures and survival stat
     false,
   );
 });
+
+test('a refused action emits exactly one deny event and never a fake reward', () => {
+  const game = new Game(1);
+  Object.assign(game.player, { x: 180, y: 50 });
+  game.drainEvents();
+  assert.equal(harvest(game), false);
+  const denied = game.drainEvents().filter((event) => event.type === 'deny');
+  assert.equal(denied.length, 1);
+  assert.equal(typeof denied[0].x, 'number');
+  assert.equal(typeof denied[0].y, 'number');
+  assert.equal(game.inventory.wood, 0);
+});
+
+test('nothing in reach and a successful harvest do not produce deny feedback', () => {
+  const game = new Game(1);
+  // Find genuinely open ground instead of assuming where the forest is empty.
+  let open = null;
+  for (let x = -400; x <= 400 && !open; x += 37)
+    for (let y = -400; y <= 400 && !open; y += 41) {
+      Object.assign(game.player, { x, y });
+      if (game.getTarget() === null) open = { x, y };
+    }
+  assert.ok(open, 'the generated world should contain open ground');
+  Object.assign(game.player, open);
+  game.drainEvents();
+  assert.equal(harvest(game), false);
+  assert.deepEqual(game.drainEvents(), []);
+  Object.assign(game.player, { x: -75, y: -45 });
+  assert.equal(harvest(game), true);
+  assert.equal(game.drainEvents().filter((event) => event.type === 'deny').length, 0);
+});
+
+test('an invalid build spot reports a deny event without spending the structure', () => {
+  const game = new Game(1);
+  game.inventory.wall = 1;
+  game.beginPlacement('wall');
+  game.drainEvents();
+  assert.equal(game.place(0, 0), false);
+  assert.equal(game.drainEvents().filter((event) => event.type === 'deny').length, 1);
+  assert.equal(game.inventory.wall, 1);
+  assert.equal(game.world.structures.length, 0);
+});
+
+test('a full inventory refuses the harvest and warns the player', () => {
+  const game = new Game(1);
+  Object.assign(game.player, { x: -75, y: -45 });
+  game.inventory.berry = MAX_STACK;
+  game.drainEvents();
+  assert.equal(harvest(game), false);
+  const events = game.drainEvents();
+  assert.ok(events.some((event) => event.type === 'deny'));
+  assert.ok(events.some((event) => event.type === 'message'));
+  assert.equal(game.world.changes.size, 0);
+});

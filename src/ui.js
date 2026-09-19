@@ -1,9 +1,15 @@
 import { ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
+import { MOTION_MODES, percentToVolume, volumeToPercent } from './settings.js';
 import { icon, fillIcons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
+const MOTION_LABELS = {
+  system: 'Theo hệ thống',
+  on: 'Luôn giảm',
+  off: 'Luôn bật đầy đủ',
+};
 export class UI {
-  constructor({ action, craft, useItem, selectTab }) {
+  constructor({ action, craft, useItem, selectTab, setting = () => {}, resetSettings = () => {} }) {
     this.action = action;
     this.selectedItem = 'berry';
     this.tab = 'bag';
@@ -66,6 +72,21 @@ export class UI {
     document
       .querySelectorAll('[data-close]')
       .forEach((button) => button.addEventListener('click', () => action('escape')));
+    const volume = $('settings-volume');
+    volume.addEventListener('input', () => {
+      // The slider reports 0-100; settings store a 0-1 fraction.
+      const level = percentToVolume(volume.value);
+      $('settings-volume-value').textContent = `${volumeToPercent(level)}%`;
+      setting('volume', level);
+    });
+    for (const key of ['ambient', 'particles', 'debug'])
+      $(`settings-${key}`).addEventListener('change', (event) =>
+        setting(key, event.target.checked),
+      );
+    $('settings-motion').addEventListener('change', (event) =>
+      setting('motion', event.target.value),
+    );
+    $('settings-reset').addEventListener('click', () => resetSettings());
     document.querySelectorAll('dialog').forEach((dialog) => {
       dialog.addEventListener('cancel', (event) => {
         event.preventDefault();
@@ -97,6 +118,37 @@ export class UI {
         }
       });
     });
+  }
+  // The label comes from src/config.js, never from user input.
+  setVersion(label, version) {
+    $('edition-label').innerHTML = `THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>${label}</i>`;
+    $('game-version').textContent = `Domeo ${label} · bản dựng ${version}`;
+  }
+  // `debug` may differ from the stored setting when ?debug=1 asked for it.
+  syncSettings(settings, { debug = settings.debug } = {}) {
+    const volume = volumeToPercent(settings.volume);
+    $('settings-volume').value = String(volume);
+    $('settings-volume-value').textContent = `${volume}%`;
+    for (const key of ['ambient', 'particles']) $(`settings-${key}`).checked = settings[key];
+    $('settings-debug').checked = debug;
+    const motion = MOTION_MODES.includes(settings.motion) ? settings.motion : 'system';
+    $('settings-motion').value = motion;
+    $('settings-motion-note').textContent = MOTION_LABELS[motion];
+    this.setDebugVisible(debug);
+  }
+  setDebugVisible(visible) {
+    $('debug-overlay').hidden = !visible;
+  }
+  debug(text) {
+    $('debug-overlay').textContent = text;
+  }
+  // A refused action flashes the prompt instead of silently doing nothing.
+  denied() {
+    const prompt = $('interaction-prompt');
+    prompt.classList.remove('denied');
+    void prompt.offsetWidth;
+    prompt.classList.add('denied');
+    setTimeout(() => prompt.classList.remove('denied'), 600);
   }
   setMenu(isMenu) {
     $('app').classList.toggle('in-menu', isMenu);

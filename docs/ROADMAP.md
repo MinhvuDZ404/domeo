@@ -3,6 +3,33 @@
 - **Ngày lập:** 19/09/2026
 - **Nền tảng:** bản 2.0 hiện có trong workspace
 - **Trạng thái:** đề xuất để triển khai từng đợt; tài liệu này không có nghĩa các tính năng bên dưới đã được làm hoặc phát hành.
+- **Cập nhật 19/09/2026:** bản **3.0.0** đã phát hành như một bản hoàn thiện trải nghiệm, không phải bản gộp của v2.1–v2.5. Xem mục 0 bên dưới.
+
+## 0. Bản 3.0 đã làm gì so với lộ trình này
+
+Bản 3.0 đi thẳng vào **giai đoạn 6 (v3.0 — hoàn thiện để phát hành)** cho vòng chơi hiện có, và
+chưa làm v2.1–v2.5. Lý do: nhịp chơi 2.0 đã ổn định, nên việc cân bằng, hình ảnh, âm thanh, hiệu
+năng và tài liệu kiểm thử mang lại giá trị ngay mà không phải mở thêm hệ thống mới.
+
+| Mốc lộ trình                  | Trạng thái trong 3.0                                                                                                                                                                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1 — Nền tảng an toàn       | **Chưa làm.** Vẫn chưa có chuyển đổi bản lưu nhiều bước, xuất/nhập JSON, sao lưu định kỳ hay phát hiện hai tab. Cấu trúc bản lưu vẫn là phiên bản 1 nên chưa có gì phải chuyển đổi.                                                                                                       |
+| v2.2 — Một nơi để trở về      | **Chưa làm.** Chưa có rương, bàn chế tạo, tường/cửa, nấu ăn.                                                                                                                                                                                                                              |
+| v2.3 — Khu rừng rộng hơn      | **Chưa làm.** Chưa có vùng sinh thái, bản đồ hay địa điểm.                                                                                                                                                                                                                                |
+| v2.4 — Một hành trình có đích | **Chưa làm.** Mục tiêu khởi đầu vẫn là danh sách 5 bước, chưa thành hệ thống nhiệm vụ.                                                                                                                                                                                                    |
+| v2.5 — Hiểm nguy trong rừng   | **Chưa làm** và vẫn là hạng mục tùy chọn.                                                                                                                                                                                                                                                 |
+| v3.0 — Bản hoàn thiện         | **Đã làm một phần:** cài đặt trong game (âm lượng, âm thanh môi trường, giảm chuyển động, hiệu ứng), phản hồi khi hành động và khi bị từ chối, thang màu ngày–đêm, tối ưu vẽ và truy vấn, công cụ đo hiệu năng/cân bằng, 67 kiểm thử logic + 20 kịch bản trình duyệt, tài liệu phát hành. |
+
+Còn **hai điều kiện của giai đoạn 6 chưa đạt**, và tài liệu này giữ nguyên chúng như việc phải làm:
+
+1. **Thử trên điện thoại thật** (ít nhất một Android/Chrome và một iPhone/Safari). Bảng ghi kết quả
+   còn trống trong `docs/RELEASE-3.0.md`.
+2. **Đo FPS thật trong trình duyệt.** Đã có bảng thông số (`?debug=1`) để đo, nhưng số liệu thực tế
+   chưa được ghi lại (`docs/PERFORMANCE.md`).
+
+PWA/ngoại tuyến vẫn nằm ngoài bản này, có lý do trong `docs/RELEASE-3.0.md`. **Giữ nguyên khuyến
+nghị:** đợt tiếp theo vẫn nên là v2.1, vì mọi thứ về sau (rương, vùng sinh thái, nhiệm vụ) đều làm
+bản lưu phức tạp hơn.
 
 ## 1. Định hướng
 
@@ -30,6 +57,9 @@ Ba nguyên tắc:
 - Menu, tạm dừng, chơi lại, túi đồ, hướng dẫn và mục tiêu khởi đầu.
 - Lưu/tiếp tục bằng `localStorage`; điều khiển bàn phím và cảm ứng.
 - Kiến trúc module, CI và bộ kiểm thử hiện có gồm 42 kiểm thử logic, 14 kiểm thử trình duyệt.
+- Từ 3.0: cài đặt người chơi lưu riêng, âm thanh môi trường, phản hồi hành động, công cụ đo hiệu
+  năng (`npm run perf`) và đo cân bằng (`npm run balance`), nâng lên 67 kiểm thử logic và 20 kịch
+  bản trình duyệt.
 
 ### Khoảng trống chính
 

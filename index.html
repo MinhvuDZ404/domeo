@@ -55,6 +55,14 @@
           >
             <span data-icon="muted" data-size="20"></span>
           </button>
+          <button
+            id="settings-button"
+            class="icon-button settings-button"
+            title="Cài đặt (O)"
+            aria-label="Cài đặt"
+          >
+            <span data-icon="gear" data-size="20"></span>
+          </button>
           <button id="help-button" class="icon-button" title="Cách chơi" aria-label="Cách chơi">
             <span data-icon="help" data-size="21"></span>
           </button>
@@ -112,7 +120,9 @@
             <span><kbd>W A S D</kbd> Di chuyển</span><span><kbd>E</kbd> Hái lượm</span
             ><span><kbd>B</kbd> Túi đồ</span>
           </div>
-          <span class="edition">THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v2.0</i></span>
+          <span id="edition-label" class="edition"
+            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v3.0</i></span
+          >
         </footer>
       </section>
 
@@ -282,6 +292,7 @@
         aria-live="polite"
         aria-atomic="false"
       ></div>
+      <p id="debug-overlay" class="debug-overlay" role="status" hidden></p>
       <div id="loading-state" class="loading-state" role="status">
         <span class="loading-spinner"></span> Đang đánh thức khu rừng…
       </div>
@@ -349,6 +360,8 @@
           <span data-icon="play" data-size="18"></span> Tiếp tục khám phá</button
         ><button id="pause-save-button" class="button button-outline">
           <span data-icon="save" data-size="18"></span> Lưu hành trình</button
+        ><button id="pause-settings-button" class="button button-outline">
+          <span data-icon="gear" data-size="18"></span> Cài đặt</button
         ><button id="home-button" class="text-button">
           Về màn hình chính <span data-icon="arrow" data-size="16"></span>
         </button>
@@ -387,6 +400,12 @@
           <kbd>5 / Esc</kbd><strong>Khi đêm xuống</strong
           ><span>Bật đuốc bằng 5. Esc để hủy xây hoặc tạm dừng. Tự lưu mỗi 15 giây.</span>
         </div>
+        <div>
+          <kbd>O / M</kbd><strong>Tuỳ chỉnh khu rừng</strong
+          ><span
+            >O mở cài đặt âm lượng, âm thanh môi trường và hiệu ứng. M bật hoặc tắt tiếng.</span
+          >
+        </div>
       </div>
       <div class="help-note">
         <span data-icon="save" data-size="19"></span
@@ -398,6 +417,88 @@
       <button class="button button-dark" data-close>
         Mình sẵn sàng rồi <span data-icon="arrow" data-size="18"></span>
       </button>
+      <small id="game-version" class="dialog-footnote">Domeo v3.0</small>
+    </dialog>
+
+    <dialog
+      id="settings-dialog"
+      class="paper-dialog settings-dialog"
+      aria-labelledby="settings-title"
+    >
+      <button class="paper-icon-button dialog-close" data-close aria-label="Đóng cài đặt">
+        <span data-icon="close" data-size="22"></span>
+      </button>
+      <span class="paper-eyebrow">TUỲ CHỈNH TRẢI NGHIỆM</span>
+      <h2 id="settings-title">Khu rừng theo ý bạn.</h2>
+      <p>
+        Những lựa chọn này chỉ lưu trên trình duyệt hiện tại<br />và không ảnh hưởng tới hành trình
+        của bạn.
+      </p>
+      <div class="settings-list">
+        <div class="settings-row">
+          <div><strong>Âm lượng</strong><small>Áp dụng cho mọi âm thanh trong game.</small></div>
+          <div class="settings-control">
+            <input
+              id="settings-volume"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value="70"
+              aria-label="Âm lượng"
+            /><span id="settings-volume-value">70%</span>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Âm thanh môi trường</strong
+            ><small>Tiếng gió và chim rừng khi bạn bật âm thanh.</small>
+          </div>
+          <div class="settings-control">
+            <input id="settings-ambient" type="checkbox" aria-label="Âm thanh môi trường" />
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Hiệu ứng khi hái lượm</strong
+            ><small>Tắt để khu rừng tĩnh hơn và nhẹ máy hơn.</small>
+          </div>
+          <div class="settings-control">
+            <input id="settings-particles" type="checkbox" aria-label="Hiệu ứng khi hái lượm" />
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Giảm chuyển động</strong><small id="settings-motion-note">Theo hệ thống</small>
+          </div>
+          <div class="settings-control">
+            <select id="settings-motion" aria-label="Giảm chuyển động">
+              <option value="system">Theo hệ thống</option>
+              <option value="on">Luôn giảm</option>
+              <option value="off">Luôn bật đầy đủ</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Bảng thông số</strong
+            ><small>Hiện FPS và số vật thể đang vẽ, dùng khi thử máy.</small>
+          </div>
+          <div class="settings-control">
+            <input id="settings-debug" type="checkbox" aria-label="Bảng thông số" />
+          </div>
+        </div>
+      </div>
+      <div class="dialog-buttons">
+        <button id="settings-reset" class="button button-outline">Trả về mặc định</button
+        ><button class="button button-dark" data-close>
+          Xong <span data-icon="check" data-size="18"></span>
+        </button>
+      </div>
+      <small class="dialog-footnote"
+        >Mở lại bằng phím O. Bảng thông số cũng có thể bật bằng đường dẫn
+        <code>?debug=1</code>.</small
+      >
     </dialog>
 
     <dialog id="gameover-dialog" class="paper-dialog" aria-labelledby="gameover-title">

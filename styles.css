@@ -751,6 +751,26 @@ h1 em {
 .interaction-prompt.warning {
   color: #e0be89;
 }
+.interaction-prompt.denied {
+  border-color: #d99f8a99;
+  animation: prompt-deny 0.55s ease-out;
+}
+@keyframes prompt-deny {
+  0% {
+    transform: translateX(-50%) scale(1);
+    box-shadow: 0 5px 15px #0c1c1044;
+  }
+  25% {
+    transform: translateX(calc(-50% - 5px)) scale(1.03);
+    box-shadow: 0 6px 20px #b4705a44;
+  }
+  55% {
+    transform: translateX(calc(-50% + 4px)) scale(1.01);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+  }
+}
 .placement-bar {
   position: absolute;
   bottom: 153px;
@@ -1334,6 +1354,111 @@ h2 {
     transform: translateX(0);
   }
 }
+/* Settings live in the same paper dialog as the rest of the game. */
+.settings-dialog {
+  width: 470px;
+  padding: 36px 34px 28px;
+}
+.settings-dialog h2 {
+  font-size: 30px;
+}
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 22px 0 0;
+  text-align: left;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #dde1d2;
+}
+.settings-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.settings-row strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+.settings-row small {
+  display: block;
+  font-size: 9px;
+  line-height: 1.7;
+  color: #85917b;
+  margin-top: 4px;
+  max-width: 250px;
+}
+.settings-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.settings-control input[type='range'] {
+  width: 108px;
+  accent-color: #5d7a4a;
+}
+.settings-control input[type='checkbox'] {
+  width: 26px;
+  height: 26px;
+  accent-color: #5d7a4a;
+}
+.settings-control span {
+  font-size: 10px;
+  color: #64745a;
+  min-width: 34px;
+  text-align: right;
+}
+.settings-control select {
+  font: inherit;
+  font-size: 10px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid #c9d0bd;
+  background: #f1f2e9;
+  color: #55684b;
+}
+.settings-dialog .dialog-buttons {
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.settings-dialog .dialog-buttons .button {
+  min-height: 44px;
+}
+.settings-dialog code {
+  font-size: 8px;
+  background: #e4e8d9;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.debug-overlay {
+  position: absolute;
+  z-index: 30;
+  left: 12px;
+  bottom: 12px;
+  margin: 0;
+  padding: 7px 10px;
+  font:
+    500 9px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  letter-spacing: 0.2px;
+  color: #d7e3c4;
+  background: #0f1f16d9;
+  border: 1px solid #ffffff1f;
+  border-radius: 6px;
+  pointer-events: none;
+}
 @media (min-width: 1600px) {
   .menu-copy {
     left: 10%;
@@ -1425,12 +1550,12 @@ h2 {
     gap: 6px;
   }
   .icon-button {
-    width: 34px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
   }
   .save-button {
     padding: 0;
-    width: 34px;
+    width: 38px;
   }
   .save-button > span:last-child {
     display: none;
@@ -1709,12 +1834,36 @@ h2 {
   .paper-dialog {
     padding: 32px 25px;
   }
+  .settings-dialog {
+    padding: 30px 20px 22px;
+  }
+  .settings-row {
+    align-items: flex-start;
+  }
+  .settings-row small {
+    max-width: 190px;
+  }
+  .settings-control input[type='range'] {
+    width: 82px;
+  }
   .loading-state {
     bottom: 80px;
     font-size: 9px;
   }
 }
 @media (pointer: coarse), (max-width: 700px) {
+  /* Touch-first layout: the smaller controls grow towards a comfortable target. */
+  .icon-button {
+    width: 42px;
+    height: 42px;
+  }
+  .save-button {
+    width: 42px;
+  }
+  .paper-icon-button {
+    width: 42px;
+    height: 42px;
+  }
   .mobile-controls {
     display: block;
   }
@@ -1814,6 +1963,26 @@ h2 {
     content: 'Chạm để bắt đầu · Có điều khiển cảm ứng';
     font-size: 8px;
     color: #a2b298;
+  }
+}
+@media (max-width: 460px) {
+  /* Saving still happens automatically and from the pause menu, so the top bar
+     drops the save chip first instead of shrinking every control. */
+  .save-button {
+    display: none;
+  }
+}
+@media (max-width: 380px) {
+  /* Very narrow screens keep the essentials; settings stay reachable from the
+     pause menu. */
+  .settings-button {
+    display: none;
+  }
+  .topbar {
+    padding: 18px 14px;
+  }
+  .top-actions {
+    gap: 5px;
   }
 }
 @media (max-width: 370px) {

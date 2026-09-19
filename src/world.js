@@ -1,5 +1,12 @@
 import { CHUNK_SIZE, MAX_CACHED_CHUNKS, RESOURCES, WORLD_LIMIT } from './config.js';
 
+// Buildings keep resources from regrowing on their footprint. Checking every
+// building for every entity made the cost of a base grow with its size, so
+// structures are bucketed into a coarse grid instead.
+export const STRUCTURE_CELL = 64;
+export const STRUCTURE_CLEARANCE = { wall: 48, campfire: 42, default: 42 };
+export const clearanceFor = (type) => STRUCTURE_CLEARANCE[type] ?? STRUCTURE_CLEARANCE.default;
+
 // An integer hash preserves signs; unlike abs(x ^ y), opposite chunks do not mirror.
 export function hash(seed, x, y) {
   let h = (seed ^ Math.imul(x, 374761393) ^ Math.imul(y, 668265263)) >>> 0;
@@ -84,6 +91,42 @@ export class World {
     this.chunks = new Map();
     this.changes = new Map(changes.map((change) => [change.id, { ...change }]));
     this.structures = structures.map((s) => ({ ...s }));
+    this.structureGrid = new Map();
+    this.indexedStructures = null;
+    this.indexedCount = -1;
+  }
+  // The index repairs itself whenever the public structures array changes,
+  // because tests and the save system both replace it wholesale.
+  structureIndex() {
+    if (this.indexedStructures === this.structures && this.indexedCount === this.structures.length)
+      return this.structureGrid;
+    this.structureGrid.clear();
+    for (const structure of this.structures) {
+      const key = `${Math.floor(structure.x / STRUCTURE_CELL)},${Math.floor(structure.y / STRUCTURE_CELL)}`;
+      const bucket = this.structureGrid.get(key);
+      if (bucket) bucket.push(structure);
+      else this.structureGrid.set(key, [structure]);
+    }
+    this.indexedStructures = this.structures;
+    this.indexedCount = this.structures.length;
+    return this.structureGrid;
+  }
+  // Structures close enough to keep a resource from regrowing at this point.
+  structuresNear(x, y) {
+    const grid = this.structureIndex(),
+      cx = Math.floor(x / STRUCTURE_CELL),
+      cy = Math.floor(y / STRUCTURE_CELL);
+    let result = null;
+    for (let gy = cy - 1; gy <= cy + 1; gy++) {
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        const bucket = grid.get(`${gx},${gy}`);
+        if (!bucket) continue;
+        for (const structure of bucket)
+          if (Math.hypot(structure.x - x, structure.y - y) < clearanceFor(structure.type))
+            (result ??= []).push(structure);
+      }
+    }
+    return result;
   }
   getChunk(cx, cy) {
     const key = `${cx},${cy}`;
@@ -119,12 +162,7 @@ export class World {
           )
             continue;
           // A placed structure owns its footprint; depleted resources cannot regrow through it.
-          if (
-            this.structures.some(
-              (s) => Math.hypot(s.x - entity.x, s.y - entity.y) < (s.type === 'wall' ? 48 : 42),
-            )
-          )
-            continue;
+          if (this.structuresNear(entity.x, entity.y)) continue;
           result.push({ ...entity, ...this.getState(entity, elapsed) });
         }
       }
@@ -148,20 +186,20 @@ export class World {
   isBlocked(x, y, elapsed, radius = 11) {
     if (Math.abs(x) > WORLD_LIMIT || Math.abs(y) > WORLD_LIMIT) return true;
     const player = { x: x - radius, y: y - radius, width: radius * 2, height: radius * 2 };
+    const stops = (entity) => {
+      if (entity.remaining === 0) return false;
+      const box = hitbox(entity);
+      return !!box && overlaps(player, box);
+    };
     const nearby = this.getEntities({ x: x - 50, y: y - 50, width: 100, height: 100 }, elapsed);
-    return [...nearby, ...this.structures].some((e) => {
-      if (e.remaining === 0) return false;
-      const box = hitbox(e);
-      return box && overlaps(player, box);
-    });
+    return nearby.some(stops) || (this.structuresNear(x, y)?.some(stops) ?? false);
   }
   canMove(fromX, fromY, x, y, elapsed) {
     if (Math.abs(x) > WORLD_LIMIT || Math.abs(y) > WORLD_LIMIT) return false;
     const box = (px, py) => ({ x: px - 11, y: py - 11, width: 22, height: 22 });
     const before = box(fromX, fromY),
       after = box(x, y);
-    const nearby = this.getEntities({ x: x - 50, y: y - 50, width: 100, height: 100 }, elapsed);
-    return ![...nearby, ...this.structures].some((entity) => {
+    const blocks = (entity) => {
       if (entity.remaining === 0) return false;
       const obstacle = hitbox(entity);
       if (!obstacle || !overlaps(after, obstacle)) return false;
@@ -170,7 +208,10 @@ export class World {
       const cx = obstacle.x + obstacle.width / 2,
         cy = obstacle.y + obstacle.height / 2;
       return Math.hypot(x - cx, y - cy) <= Math.hypot(fromX - cx, fromY - cy);
-    });
+    };
+    const nearby = this.getEntities({ x: x - 50, y: y - 50, width: 100, height: 100 }, elapsed);
+    if (nearby.some(blocks)) return false;
+    return !(this.structuresNear(x, y)?.some(blocks) ?? false);
   }
   serialize(elapsed) {
     this.prune(elapsed);

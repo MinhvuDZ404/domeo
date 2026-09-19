@@ -1,13 +1,20 @@
 import {
+  BERRY_HEALTH,
+  BERRY_HUNGER,
+  CAMPFIRE_HEAL_PER_SECOND,
+  CAMPFIRE_HEAL_RADIUS,
   DAY_LENGTH,
-  ITEMS,
-  RECIPES,
-  RESOURCES,
-  PLAYER_SPEED,
+  FIRE_MIN_HUNGER,
+  HUNGER_DRAIN_PER_SECOND,
   INTERACTION_DISTANCE,
+  ITEMS,
   MAX_STACK,
   MAX_STRUCTURES,
+  PLAYER_SPEED,
+  RECIPES,
+  RESOURCES,
   SAVE_VERSION,
+  STARVATION_DAMAGE_PER_SECOND,
   WORLD_LIMIT,
   clamp,
 } from './config.js';
@@ -55,12 +62,13 @@ export class Game {
     this.elapsed += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
     const p = this.player;
-    p.hunger = Math.max(0, p.hunger - dt * 0.22);
-    if (p.hunger <= 0) p.health = Math.max(0, p.health - dt * 3);
+    p.hunger = Math.max(0, p.hunger - dt * HUNGER_DRAIN_PER_SECOND);
+    if (p.hunger <= 0) p.health = Math.max(0, p.health - dt * STARVATION_DAMAGE_PER_SECOND);
     const byFire = this.world.structures.some(
-      (s) => s.type === 'campfire' && Math.hypot(p.x - s.x, p.y - s.y) < 100,
+      (s) => s.type === 'campfire' && Math.hypot(p.x - s.x, p.y - s.y) < CAMPFIRE_HEAL_RADIUS,
     );
-    if (byFire && p.hunger > 20) p.health = Math.min(100, p.health + dt * 2.5);
+    if (byFire && p.hunger > FIRE_MIN_HUNGER)
+      p.health = Math.min(100, p.health + dt * CAMPFIRE_HEAL_PER_SECOND);
     if (p.health <= 0) {
       this.dead = true;
       this.placement = null;
@@ -120,6 +128,7 @@ export class Game {
     this.cooldown = 0.38;
     const tool = RESOURCES[target.type].tool;
     if (tool && !this.inventory[tool]) {
+      this.emit('deny', { x: target.x, y: target.y });
       this.emit('message', {
         text: `Bạn cần chế tạo ${ITEMS[tool].name.toLowerCase()}.`,
         tone: 'warning',
@@ -134,6 +143,7 @@ export class Game {
           : 'berry';
     const quantity = ['tree', 'rock'].includes(target.type) ? 5 : target.type === 'bush' ? 1 : 2;
     if (this.inventory[reward] + quantity > MAX_STACK) {
+      this.emit('deny', { x: target.x, y: target.y });
       this.emit('message', { text: `${ITEMS[reward].name} đã đầy.`, tone: 'warning' });
       return false;
     }
@@ -163,9 +173,9 @@ export class Game {
       return false;
     }
     this.inventory.berry--;
-    this.player.hunger = Math.min(100, this.player.hunger + 25);
-    this.player.health = Math.min(100, this.player.health + 3);
-    this.emit('eat', { text: '+25 no · +3 máu' });
+    this.player.hunger = Math.min(100, this.player.hunger + BERRY_HUNGER);
+    this.player.health = Math.min(100, this.player.health + BERRY_HEALTH);
+    this.emit('eat', { text: `+${BERRY_HUNGER} no · +${BERRY_HEALTH} máu` });
     return true;
   }
   canCraft(id) {
@@ -237,6 +247,7 @@ export class Game {
   place(x, y) {
     if (this.dead || !this.placement || !this.inventory[this.placement]) return false;
     if (!this.canPlace(x, y)) {
+      this.emit('deny', { x, y });
       this.emit('message', {
         text: 'Chọn vùng đất trống gần bạn, không sát chân hoặc vật cản. Tối đa 100 công trình.',
         tone: 'warning',
