@@ -38,6 +38,8 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await ready(page);
   await expect(page).toHaveTitle('Domeo — Một chuyến đi hoang dã');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Đi lạc một chút.');
+  await expect(page.locator('#edition-label')).toContainText('v3.0');
+  await expect(page.locator('#edition-label i')).toHaveText('v3.0');
   await expect(page.locator('#continue-button')).toBeHidden();
   await page.locator('#help-button').click();
   await expect(page.locator('#help-dialog')).toBeVisible();
@@ -266,6 +268,115 @@ test('all asset and module paths work beneath a GitHub Pages project subdirector
   expect(errors).toEqual([]);
 });
 
+test('settings open from the menu and survive a reload without raising errors', async ({
+  page,
+}) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await ready(page);
+  await page.locator('#settings-button').click();
+  await expect(page.locator('#settings-dialog')).toBeVisible();
+  await page.locator('#settings-volume').focus();
+  for (let step = 0; step < 7; step++) await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#settings-volume-value')).toHaveText('35%');
+  await page.locator('#settings-ambient').uncheck();
+  await page.locator('#settings-motion').selectOption('on');
+  await page.getByRole('button', { name: 'Xong' }).click();
+  await expect(page.locator('#settings-dialog')).toBeHidden();
+  await expect(page.locator('#main-menu')).toBeVisible();
+  await page.reload();
+  await ready(page);
+  await page.keyboard.press('KeyO');
+  await expect(page.locator('#settings-dialog')).toBeVisible();
+  await expect(page.locator('#settings-volume')).toHaveValue('35');
+  await expect(page.locator('#settings-ambient')).not.toBeChecked();
+  await expect(page.locator('#settings-motion')).toHaveValue('on');
+  await page.getByRole('button', { name: 'Trả về mặc định' }).click();
+  await expect(page.locator('#settings-volume')).toHaveValue('70');
+  await expect(page.locator('#settings-ambient')).toBeChecked();
+  await expect(page.locator('#settings-motion')).toHaveValue('system');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settings-dialog')).toBeHidden();
+  await expect(page.locator('#main-menu')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('harvesting without the right tool flashes the prompt and explains why', async ({ page }) => {
+  const game = new Game(404);
+  Object.assign(game.player, { x: 180, y: 50, hunger: 80 });
+  await restore(page, game.snapshot());
+  await expect(page.locator('#interaction-label')).toHaveText('Cần rìu đá');
+  await page.keyboard.press('KeyE');
+  await expect(page.locator('#interaction-prompt')).toHaveClass(/denied/);
+  await expect(page.locator('#toast-region')).toContainText('Bạn cần chế tạo rìu đá');
+  await expect(page.locator('[data-count="axe"]')).toHaveText('0');
+});
+
+test('gathering and building play their feedback without raising errors', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  Object.assign(game.player, { x: -75, y: -45 });
+  Object.assign(game.inventory, { wood: 10, stone: 10 });
+  await restore(page, game.snapshot());
+  await page.keyboard.press('KeyE');
+  await expect(page.locator('[data-count="berry"]')).toHaveText('4');
+  await page.keyboard.press('KeyC');
+  await page.locator('[data-craft="campfire"]').click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Digit4');
+  await expect(page.locator('#placement-bar')).toBeVisible();
+  const { width, height } = page.viewportSize();
+  const zoom = Math.min(1.5, Math.max(1.1, Math.min(width / 1000, height / 730)));
+  await page
+    .locator('#gameCanvas')
+    .click({ position: { x: width / 2 + 75 * zoom, y: height * 0.52 + 45 * zoom } });
+  await expect(page.locator('#placement-bar')).toBeHidden();
+  await expect(page.locator('[data-count="campfire"]')).toHaveText('0');
+  await expect(page.locator('#toast-region')).toContainText('Một đốm lửa');
+  expect(errors).toEqual([]);
+});
+
+test('the debug overlay can be requested with a query parameter', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/?debug=1');
+  await ready(page);
+  await expect(page.locator('#debug-overlay')).toBeVisible();
+  await page.locator('#new-button').click();
+  await expect(page.locator('#debug-overlay')).toContainText('FPS');
+  await expect(page.locator('#debug-overlay')).toContainText('vật thể');
+  await expect(page.locator('#debug-overlay')).toContainText('ms/khung');
+  await page.keyboard.press('KeyO');
+  await expect(page.locator('#settings-debug')).toBeChecked();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settings-dialog')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('helpers stay reachable when the browser blocks local storage', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException('Blocked', 'SecurityError');
+    };
+  });
+  await page.goto('/');
+  await ready(page);
+  await page.locator('#settings-button').click();
+  await expect(page.locator('#settings-dialog')).toBeVisible();
+  await page.locator('#settings-volume').focus();
+  for (let step = 0; step < 3; step++) await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#toast-region')).toContainText('Chưa lưu được cài đặt');
+  await expect(page.locator('#settings-volume-value')).toHaveText('55%');
+  await page.getByRole('button', { name: 'Xong' }).click();
+  await page.locator('#new-button').click();
+  await expect(page.locator('#game-hud')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test.describe('touchscreen', () => {
   test.use({
     viewport: { width: 390, height: 844 },
@@ -306,6 +417,37 @@ test.describe('touchscreen', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
+    expect(errors).toEqual([]);
+  });
+  test('settings stay reachable on a phone, from the top bar and the pause menu', async ({
+    page,
+  }) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await fresh(page);
+    for (const selector of ['#sound-button', '#settings-button', '#pause-button']) {
+      const box = await page.locator(selector).boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+      expect(box.width).toBeGreaterThanOrEqual(40);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.locator('#settings-button').tap();
+    await expect(page.locator('#settings-dialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Trả về mặc định' }).tap();
+    await page.getByRole('button', { name: 'Xong' }).tap();
+    await expect(page.locator('#settings-dialog')).toBeHidden();
+    await expect(page.locator('#game-hud')).toBeVisible();
+    await page.locator('#pause-button').tap();
+    await page.locator('#pause-settings-button').tap();
+    await expect(page.locator('#settings-dialog')).toBeVisible();
+    await expect(page.locator('#pause-dialog')).toBeHidden();
+    await page.getByRole('button', { name: 'Xong' }).tap();
+    await expect(page.locator('#pause-dialog')).toBeVisible();
+    await page.locator('#resume-button').tap();
+    await expect(page.locator('#pause-dialog')).toBeHidden();
     expect(errors).toEqual([]);
   });
   test('compact portrait and landscape layouts keep the controls on screen', async ({ page }) => {

@@ -1,10 +1,38 @@
 import { CHUNK_SIZE, RESOURCES, getDayInfo, clamp } from './config.js';
+import { DEFAULT_SETTINGS } from './settings.js';
 
 const ASSETS = {
   grass: 'assets/environment/grass.png',
   tree: 'assets/environment/tree.png',
   player: 'assets/sprites/player_walk_new.png',
 };
+// Small, bounded bursts. Particles are decoration only: they never affect play.
+const PARTICLES = {
+  leaf: {
+    colors: ['#9fbf6a', '#7d9c56', '#c6d69a'],
+    gravity: 26,
+    spread: 52,
+    life: 0.95,
+    count: 8,
+  },
+  stone: {
+    colors: ['#a8b0a2', '#7d8a7e', '#cfd3c4'],
+    gravity: 95,
+    spread: 42,
+    life: 0.8,
+    count: 7,
+  },
+  spark: {
+    colors: ['#f2cd7d', '#e8a95a', '#fff2c4'],
+    gravity: -14,
+    spread: 36,
+    life: 0.9,
+    count: 9,
+  },
+  deny: { colors: ['#dd9a86', '#c47a66'], gravity: 44, spread: 28, life: 0.55, count: 5 },
+};
+const MAX_PARTICLES = 120;
+const MAX_VISIBLE_LIGHTS = 6;
 function loadImage(src) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -28,7 +56,7 @@ function surface(width, height) {
 }
 
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, { settings = DEFAULT_SETTINGS } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.camera = { x: 0, y: 0 };
@@ -38,11 +66,31 @@ export class Renderer {
     this.images = {};
     this.frames = {};
     this.effects = [];
+    this.particles = [];
+    this.decorationBuckets = new WeakMap();
+    this.settings = { ...DEFAULT_SETTINGS, ...settings };
+    this.lastFrame = null;
+    this.stats = { entities: 0, structures: 0, particles: 0, lights: 0 };
     this.light = surface(1, 1);
-    this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.prefersReducedMotion = globalThis.matchMedia
+      ? matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
     this.resize();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
+  }
+  // A player choice of "less movement" wins over the system preference.
+  get reducedMotion() {
+    if (this.settings.motion === 'on') return true;
+    if (this.settings.motion === 'off') return false;
+    return this.prefersReducedMotion;
+  }
+  get motionEffects() {
+    return !this.reducedMotion;
+  }
+  applySettings(settings) {
+    this.settings = { ...DEFAULT_SETTINGS, ...settings };
+    if (!this.settings.particles) this.particles.length = 0;
   }
   async load() {
     await Promise.all(
@@ -136,12 +184,52 @@ export class Renderer {
     this.effects.push({ ...event, born: performance.now() });
     if (this.effects.length > 30) this.effects.shift();
   }
+  // Feedback for a completed or refused action. Disabled by the player setting,
+  // by reduced motion, or when the particle budget is already used up.
+  addBurst(kind, x, y) {
+    const style = PARTICLES[kind];
+    if (!style || !this.motionEffects || !this.settings.particles) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const count = Math.min(style.count, MAX_PARTICLES - this.particles.length);
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2,
+        speed = style.spread * (0.35 + Math.random() * 0.65);
+      this.particles.push({
+        kind,
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed * 0.6 - (style.gravity < 0 ? 30 : 0),
+        age: 0,
+        life: style.life * (0.7 + Math.random() * 0.5),
+        size: kind === 'spark' ? 1.6 + Math.random() * 1.4 : 1.8 + Math.random() * 1.2,
+        color: style.colors[i % style.colors.length],
+      });
+    }
+    this.stats.particles = this.particles.length;
+  }
+  updateParticles(dt) {
+    if (!this.particles.length) return;
+    const gravityOf = (kind) => PARTICLES[kind]?.gravity ?? 40;
+    for (const particle of this.particles) {
+      particle.age += dt;
+      particle.vy += gravityOf(particle.kind) * dt;
+      particle.vx *= 1 - Math.min(0.9, dt * 2.4);
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+    }
+    this.particles = this.particles.filter((particle) => particle.age < particle.life);
+    this.stats.particles = this.particles.length;
+  }
   reset() {
     this.effects.length = 0;
+    this.particles.length = 0;
   }
   render(game, { menu = false, target = null, placement = null, time = performance.now() } = {}) {
     const ctx = this.ctx,
       p = game.player;
+    const dt = this.lastFrame === null ? 0 : clamp((time - this.lastFrame) / 1000, 0, 0.05);
+    this.lastFrame = time;
     this.zoom = menu
       ? this.width < 700
         ? 1.5
@@ -202,13 +290,54 @@ export class Renderer {
       ctx.restore();
     }
     ctx.restore();
+    this.drawGrading(game, menu);
     this.drawLight(game, menu, time);
-    if (!this.reducedMotion) this.drawAtmosphere(game, time, menu);
+    if (this.motionEffects) this.drawAtmosphere(game, time, menu);
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(-this.camera.x, -this.camera.y);
+    this.drawParticles();
     this.drawEffects(time);
     ctx.restore();
+    this.updateParticles(dt);
+    this.stats.entities = world.length;
+    this.stats.structures = game.world.structures.length;
+  }
+  // A light hand on colour: warm when the sun is low, cool and dim at night.
+  drawGrading(game, menu) {
+    const ctx = this.ctx,
+      day = getDayInfo(game.elapsed);
+    const warmth = menu
+      ? 0.25
+      : Math.min(
+          1,
+          Math.exp(-((day.phase - 0.05) ** 2) / 0.0016) * 0.85 +
+            Math.exp(-((day.phase - 0.47) ** 2) / 0.0018),
+        );
+    const night = menu ? 0 : 0.55 * (1 - day.daylight) * (1 - warmth);
+    if (warmth > 0.03) {
+      ctx.fillStyle = `rgba(228, 152, 82, ${(0.13 * warmth).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+    if (night > 0.03) {
+      ctx.fillStyle = `rgba(43, 66, 104, ${(0.14 * night).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+  }
+  // Decoration variants are bucketed once per chunk, so a frame only changes
+  // drawing state a handful of times per chunk instead of once per tuft.
+  decorationBuckets(chunk) {
+    let buckets = this.decorationBuckets.get(chunk);
+    if (!buckets) {
+      buckets = { shade: [], blades: [], stones: [] };
+      for (const decoration of chunk.decorations) {
+        if (decoration.variant < 0.16) buckets.shade.push(decoration);
+        else if (decoration.variant < 0.55) buckets.blades.push(decoration);
+        else if (decoration.variant > 0.86) buckets.stones.push(decoration);
+      }
+      this.decorationBuckets.set(chunk, buckets);
+    }
+    return buckets;
   }
   drawGround(game, bounds) {
     const ctx = this.ctx;
@@ -218,6 +347,11 @@ export class Renderer {
     clearing.addColorStop(1, '#8e8b5500');
     ctx.fillStyle = clearing;
     ctx.fillRect(-185, -185, 370, 370);
+    const margin = 60;
+    const minX = bounds.x - margin,
+      maxX = bounds.x + bounds.width + margin,
+      minY = bounds.y - margin,
+      maxY = bounds.y + bounds.height + margin;
     for (
       let cy = Math.floor(bounds.y / CHUNK_SIZE);
       cy <= Math.floor((bounds.y + bounds.height) / CHUNK_SIZE);
@@ -228,36 +362,51 @@ export class Renderer {
         cx <= Math.floor((bounds.x + bounds.width) / CHUNK_SIZE);
         cx++
       ) {
-        for (const d of game.world.getChunk(cx, cy).decorations) {
-          ctx.save();
-          ctx.translate(Math.round(d.x), Math.round(d.y));
-          if (d.variant < 0.16) {
-            ctx.fillStyle = '#9b98714a';
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 18 + d.variant * 40, 10, -0.4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#c0b88b42';
-            ctx.fillRect(-8, -4, 4, 2);
-            ctx.fillRect(6, 3, 3, 2);
-          } else if (d.variant < 0.55) {
-            ctx.strokeStyle = '#88a96e66';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-6, 2);
-            ctx.lineTo(-9, -5);
-            ctx.moveTo(-2, 3);
-            ctx.lineTo(-3, -9);
-            ctx.moveTo(2, 3);
-            ctx.lineTo(6, -4);
-            ctx.stroke();
-          } else if (d.variant > 0.86) {
-            ctx.fillStyle = '#344c30';
-            ctx.fillRect(-2, -1, 4, 3);
-            ctx.fillStyle = d.variant > 0.94 ? '#d5c594bb' : '#adb985aa';
-            ctx.fillRect(-4, -4, 3, 3);
-            ctx.fillRect(2, -6, 2, 2);
+        const buckets = this.decorationBuckets(game.world.getChunk(cx, cy));
+        const visible = (decoration) =>
+          decoration.x > minX && decoration.x < maxX && decoration.y > minY && decoration.y < maxY;
+        if (buckets.shade.length) {
+          ctx.fillStyle = '#9b98714a';
+          ctx.beginPath();
+          for (const d of buckets.shade) {
+            if (!visible(d)) continue;
+            const x = Math.round(d.x),
+              y = Math.round(d.y);
+            ctx.moveTo(x + 18 + d.variant * 40, y);
+            ctx.ellipse(x, y, 18 + d.variant * 40, 10, -0.4, 0, Math.PI * 2);
           }
-          ctx.restore();
+          ctx.fill();
+        }
+        ctx.fillStyle = '#c0b88b42';
+        for (const d of buckets.shade) {
+          if (!visible(d)) continue;
+          ctx.fillRect(Math.round(d.x) - 8, Math.round(d.y) - 4, 4, 2);
+          ctx.fillRect(Math.round(d.x) + 6, Math.round(d.y) + 3, 3, 2);
+        }
+        ctx.strokeStyle = '#88a96e66';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const d of buckets.blades) {
+          if (!visible(d)) continue;
+          const x = Math.round(d.x),
+            y = Math.round(d.y);
+          ctx.moveTo(x - 6, y + 2);
+          ctx.lineTo(x - 9, y - 5);
+          ctx.moveTo(x - 2, y + 3);
+          ctx.lineTo(x - 3, y - 9);
+          ctx.moveTo(x + 2, y + 3);
+          ctx.lineTo(x + 6, y - 4);
+        }
+        ctx.stroke();
+        for (const d of buckets.stones) {
+          if (!visible(d)) continue;
+          const x = Math.round(d.x),
+            y = Math.round(d.y);
+          ctx.fillStyle = '#344c30';
+          ctx.fillRect(x - 2, y - 1, 4, 3);
+          ctx.fillStyle = d.variant > 0.94 ? '#d5c594bb' : '#adb985aa';
+          ctx.fillRect(x - 4, y - 4, 3, 3);
+          ctx.fillRect(x + 2, y - 6, 2, 2);
         }
       }
     }
@@ -508,13 +657,18 @@ export class Renderer {
     const ctx = this.ctx;
     const day = getDayInfo(game.elapsed);
     const darkness = menu ? 0.06 : 0.68 * (1 - day.daylight);
-    if (darkness < 0.02) return;
+    if (darkness < 0.02) {
+      this.stats.lights = 0;
+      return;
+    }
     const light = this.light.getContext('2d');
     light.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     light.clearRect(0, 0, this.width, this.height);
     light.globalCompositeOperation = 'source-over';
     light.fillStyle = `rgba(9, 23, 35, ${darkness})`;
     light.fillRect(0, 0, this.width, this.height);
+    // Only the closest fires are drawn: uncapped gradients cost more than they
+    // can add on a screen that cannot show them all anyway.
     const lights = [
       {
         x: game.player.x,
@@ -523,9 +677,25 @@ export class Renderer {
         strength: game.torchLit ? 1 : 0.6,
       },
       ...game.world.structures
-        .filter((s) => s.type === 'campfire')
-        .map((s) => ({ ...s, radius: 200, strength: 1 })),
+        .filter(
+          (s) =>
+            s.type === 'campfire' &&
+            s.x > this.camera.x - 260 &&
+            s.x < this.camera.x + this.width / this.zoom + 260 &&
+            s.y > this.camera.y - 260 &&
+            s.y < this.camera.y + this.height / this.zoom + 260,
+        )
+        .map((s) => ({
+          ...s,
+          radius: 200,
+          strength: 1,
+          distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+        }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, MAX_VISIBLE_LIGHTS)
+        .map(({ x, y, radius, strength }) => ({ x, y, radius, strength })),
     ];
+    this.stats.lights = lights.length;
     light.globalCompositeOperation = 'destination-out';
     for (const source of lights) {
       const x = (source.x - this.camera.x) * this.zoom,
@@ -570,6 +740,19 @@ export class Renderer {
       ctx.closePath();
       ctx.fill();
     }
+  }
+  drawParticles() {
+    if (!this.particles.length) return;
+    const ctx = this.ctx;
+    ctx.save();
+    for (const particle of this.particles) {
+      const progress = particle.age / particle.life;
+      ctx.globalAlpha = Math.max(0, 1 - progress * progress);
+      ctx.fillStyle = particle.color;
+      const size = particle.size * (1 - progress * 0.35);
+      ctx.fillRect(Math.round(particle.x), Math.round(particle.y), size, size);
+    }
+    ctx.restore();
   }
   drawEffects(time) {
     const ctx = this.ctx;

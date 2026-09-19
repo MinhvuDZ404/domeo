@@ -3,13 +3,22 @@ import { Renderer } from './src/renderer.js';
 import { Input } from './src/input.js';
 import { UI } from './src/ui.js';
 import { Sound } from './src/sound.js';
-import { ITEMS } from './src/config.js';
+import { GAME_LABEL, GAME_VERSION, ITEMS, getDayInfo } from './src/config.js';
 import { readSave, writeSave } from './src/storage.js';
+import { DEFAULT_SETTINGS, readSettings, writeSettings } from './src/settings.js';
 import { icon } from './src/icons.js';
 
 const $ = (id) => document.getElementById(id);
-const renderer = new Renderer($('gameCanvas'));
+const loadedSettings = readSettings();
+let preferences = loadedSettings.settings;
+// ?debug=1 shows the diagnostics overlay for this visit; it is never stored, and
+// the first manual change to the setting takes over from it.
+let debugFromUrl = new URLSearchParams(location.search).has('debug');
+const debugEnabled = () => preferences.debug || debugFromUrl;
+const renderer = new Renderer($('gameCanvas'), { settings: preferences });
 const sound = new Sound();
+sound.setVolume(preferences.volume);
+sound.setAmbient(preferences.ambient);
 let game = new Game(404);
 game.player.x = 420;
 game.player.y = 220; // A frozen woodland vignette for the title screen.
@@ -23,10 +32,13 @@ let stored = readSave(),
   lastTime = performance.now(),
   lastUI = 0;
 let completedGoals = 0,
-  saveWarningShown = false;
+  saveWarningShown = false,
+  frameStats = { frames: 0, total: 0, since: performance.now(), fps: 0, average: 0 };
 
 const ui = new UI({
   action: handleAction,
+  setting: applySetting,
+  resetSettings: resetSettings,
   craft: (id) => {
     if (mode !== 'inventory') return;
     if (game.craft(id)) {
@@ -59,6 +71,11 @@ const input = new Input({
   },
 });
 ui.updateContinue(stored.data, stored.error);
+ui.setVersion(GAME_LABEL, GAME_VERSION);
+syncSettingsUI();
+if (loadedSettings.error) ui.toast(loadedSettings.error, 'warning');
+if (loadedSettings.repaired && !loadedSettings.error)
+  ui.toast('Cài đặt cũ đã được đưa về giá trị mặc định.', 'warning');
 
 function setMode(next) {
   input.clear();
@@ -67,6 +84,52 @@ function setMode(next) {
   lastTime = performance.now();
   lastUI = 0;
   if (hasJourney) ui.render(game, game.getTarget());
+}
+function commitSettings(next) {
+  const result = writeSettings(next);
+  preferences = result.settings;
+  if (!result.ok) ui.toast(result.error, 'warning');
+  renderer.applySettings(preferences);
+  sound.setVolume(preferences.volume);
+  sound.setAmbient(preferences.ambient);
+  if (debugEnabled()) frameStats.since = performance.now();
+  syncSettingsUI();
+}
+function syncSettingsUI() {
+  ui.syncSettings(preferences, { debug: debugEnabled() });
+}
+let lastVolumeBlip = 0;
+function applySetting(key, value) {
+  if (key === 'debug') debugFromUrl = false;
+  commitSettings({ ...preferences, [key]: value });
+  if (key === 'volume' && sound.enabled && performance.now() - lastVolumeBlip > 400) {
+    lastVolumeBlip = performance.now();
+    sound.play('gather');
+  }
+}
+function resetSettings() {
+  commitSettings({ ...DEFAULT_SETTINGS });
+  ui.toast('Đã trả cài đặt về mặc định.');
+}
+function openSettings() {
+  if (!ready) return;
+  if (mode !== 'settings') returnMode = mode;
+  setMode('settings');
+  syncSettingsUI();
+  ui.openDialog('settings-dialog');
+}
+function toggleSound() {
+  const on = sound.toggle();
+  $('sound-button').innerHTML = icon(on ? 'volume' : 'muted', 20);
+  $('sound-button').setAttribute('aria-pressed', String(on));
+  $('sound-button').setAttribute('aria-label', on ? 'Tắt âm thanh' : 'Bật âm thanh');
+  $('sound-button').title = on ? 'Tắt âm thanh' : 'Bật âm thanh';
+  if (on) {
+    sound.setVolume(preferences.volume);
+    sound.setAmbient(preferences.ambient);
+    sound.play('gather');
+  }
+  return on;
 }
 function save(manual = false) {
   if (!hasJourney) return true;
@@ -113,11 +176,14 @@ function openInventory(tab = 'bag') {
   ui.renderInventory(game);
 }
 function closeOverlay() {
-  if (mode === 'help') {
+  if (mode === 'help' || mode === 'settings') {
     const previous = returnMode;
     ui.closeDialogs();
     setMode(previous);
+    // Every modal screen comes back exactly as it was left.
     if (previous === 'paused') ui.openDialog('pause-dialog');
+    else if (previous === 'confirm') ui.openDialog('confirm-dialog');
+    else if (previous === 'gameover') ui.gameOver(game);
     return;
   }
   if (mode === 'confirm') {
@@ -185,6 +251,16 @@ function handleAction(action) {
     else openInventory(action);
     return;
   }
+  if (action === 'mute') {
+    toggleSound();
+    return;
+  }
+  if (action === 'options') {
+    // Settings may only be opened where closing them has an obvious destination.
+    if (mode === 'settings') closeOverlay();
+    else if (['menu', 'playing', 'paused', 'inventory'].includes(mode)) openSettings();
+    return;
+  }
   if (mode !== 'playing') return;
   if (action === 'interact') {
     if (game.placement) {
@@ -198,14 +274,20 @@ function handleAction(action) {
 function handleEvents() {
   for (const event of game.drainEvents()) {
     sound.play(event.type);
-    if (event.type === 'gather') renderer.addEffect(event);
-    else if (event.type === 'death') {
+    if (event.type === 'gather') {
+      renderer.addEffect(event);
+      renderer.addBurst(event.item === 'stone' ? 'stone' : 'leaf', event.x, event.y);
+    } else if (event.type === 'deny') {
+      renderer.addBurst('deny', event.x, event.y);
+      ui.denied();
+    } else if (event.type === 'death') {
       setMode('gameover');
       save(false);
       ui.gameOver(game);
     } else {
       if (event.type === 'build') {
         renderer.addEffect(event);
+        renderer.addBurst('spark', event.x, event.y);
         save(false);
       }
       if (event.text) ui.toast(event.text, event.tone);
@@ -258,18 +340,14 @@ $('help-button').addEventListener('click', () => {
   setMode('help');
   ui.openDialog('help-dialog');
 });
-$('sound-button').addEventListener('click', () => {
-  const on = sound.toggle();
-  $('sound-button').innerHTML = icon(on ? 'volume' : 'muted', 20);
-  $('sound-button').setAttribute('aria-pressed', String(on));
-  $('sound-button').setAttribute('aria-label', on ? 'Tắt âm thanh' : 'Bật âm thanh');
-  $('sound-button').title = on ? 'Tắt âm thanh' : 'Bật âm thanh';
-  if (on) sound.play('gather');
-});
+$('sound-button').addEventListener('click', toggleSound);
+$('settings-button').addEventListener('click', openSettings);
+$('pause-settings-button').addEventListener('click', openSettings);
 window.addEventListener('blur', () => {
   if (mode === 'playing') pause();
 });
 document.addEventListener('visibilitychange', () => {
+  sound.setHidden(document.hidden);
   if (document.hidden && hasJourney) {
     if (mode === 'playing') pause();
     else save(false);
@@ -287,7 +365,8 @@ window.addEventListener('pageshow', (event) => {
 });
 
 function loop(now) {
-  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  const raw = now - lastTime;
+  const dt = Math.min(raw / 1000, 0.05);
   lastTime = now;
   if (ready) {
     if (mode === 'playing') {
@@ -299,8 +378,11 @@ function loop(now) {
         autosaveAt = game.elapsed + 15;
       }
     }
+    // Overlays opened from the title screen keep the title screen behind them.
     const isMenu =
-      mode === 'menu' || mode === 'confirm' || (mode === 'help' && returnMode === 'menu');
+      mode === 'menu' ||
+      mode === 'confirm' ||
+      (['help', 'settings'].includes(mode) && returnMode === 'menu');
     const target = isMenu ? null : game.getTarget();
     renderer.render(game, {
       menu: isMenu,
@@ -310,7 +392,23 @@ function loop(now) {
     });
     if (now - lastUI > 120) {
       if (!isMenu) ui.render(game, target);
+      if (mode === 'playing') sound.setNight(getDayInfo(game.elapsed).isNight);
       lastUI = now;
+    }
+    if (debugEnabled()) {
+      frameStats.frames++;
+      frameStats.total += raw;
+      if (now - frameStats.since > 500) {
+        frameStats.fps = Math.round((frameStats.frames * 1000) / (now - frameStats.since));
+        frameStats.average = frameStats.total / frameStats.frames;
+        ui.debug(
+          `${frameStats.fps} FPS · ${frameStats.average.toFixed(1)} ms/khung · ` +
+            `${renderer.stats.entities} vật thể · ${renderer.stats.structures} công trình · ` +
+            `${renderer.stats.particles} hạt · ${renderer.stats.lights} nguồn sáng · ` +
+            `DPR ${renderer.dpr.toFixed(2)} · ${Math.round(renderer.width)}×${Math.round(renderer.height)}`,
+        );
+        frameStats = { ...frameStats, frames: 0, total: 0, since: now };
+      }
     }
   }
   requestAnimationFrame(loop);

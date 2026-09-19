@@ -1,3 +1,6 @@
+export const GAME_VERSION = '3.0.0';
+export const GAME_LABEL = 'v3.0';
+
 export const DAY_LENGTH = 120;
 export const DAY_OFFSET = DAY_LENGTH * 0.2;
 export const CHUNK_SIZE = 512;
@@ -9,6 +12,17 @@ export const MAX_STRUCTURES = 100;
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = 'domeo.journey.v1';
 export const WORLD_LIMIT = 1_000_000;
+
+// Survival tuning. These numbers are the dials used by the balance report in
+// docs/BALANCE.md; changing one changes how long a journey takes, so the
+// scripted playthrough should be re-run with it.
+export const HUNGER_DRAIN_PER_SECOND = 0.22;
+export const STARVATION_DAMAGE_PER_SECOND = 3;
+export const CAMPFIRE_HEAL_PER_SECOND = 2.5;
+export const CAMPFIRE_HEAL_RADIUS = 100;
+export const FIRE_MIN_HUNGER = 20;
+export const BERRY_HUNGER = 25;
+export const BERRY_HEALTH = 3;
 
 export const ITEMS = {
   berry: {

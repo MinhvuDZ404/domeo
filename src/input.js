@@ -18,6 +18,8 @@ const actions = {
   Digit4: 'campfire',
   Digit5: 'torch',
   Digit6: 'wall',
+  KeyM: 'mute',
+  KeyO: 'options',
   Escape: 'escape',
 };
 export class Input {
@@ -40,7 +42,9 @@ export class Input {
         return;
       }
       if (!active()) {
-        if (['KeyB', 'KeyC'].includes(event.code) && !event.repeat) action(actions[event.code]);
+        // Bags, crafting, sound and settings stay reachable while paused.
+        if (['KeyB', 'KeyC', 'KeyM', 'KeyO'].includes(event.code) && !event.repeat)
+          action(actions[event.code]);
         return;
       }
       if (movementCodes.includes(event.code) || event.code === 'KeyE') {
