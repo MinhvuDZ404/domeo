@@ -23,7 +23,25 @@ jobs:
       - run: npm run perf:check
       - run: npm run balance
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Browser tests
+        run: |
+          mkdir -p .cache/test-results
+          npm run test:e2e 2>&1 | tee .cache/test-results/e2e.log
+          exit ${PIPESTATUS[0]}
+      - name: Browser failure summary
+        if: failure()
+        run: |
+          # The full failure text is also copied into the job summary, where it can
+          # be read from the Checks API even if job logs are unavailable.
+          log=.cache/test-results/e2e.log
+          [ -f "$log" ] || exit 0
+          {
+            echo '### Domeo browser test failures'
+            echo ''
+            echo '```'
+            tail -c 12000 "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

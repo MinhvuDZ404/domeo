@@ -6,7 +6,9 @@ export default defineConfig({
   workers: 1,
   timeout: 25000,
   expect: { timeout: 6000 },
-  reporter: 'list',
+  // On CI the github reporter turns failures into annotations on the pull request,
+  // which stay readable even when the raw job log is not downloadable.
+  reporter: process.env.CI ? [['list'], ['github']] : 'list',
   outputDir: '.cache/test-results',
   use: {
     baseURL: 'http://127.0.0.1:5173',
