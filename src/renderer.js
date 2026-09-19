@@ -67,7 +67,7 @@ export class Renderer {
     this.frames = {};
     this.effects = [];
     this.particles = [];
-    this.decorationBuckets = new WeakMap();
+    this.decorationCache = new WeakMap();
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.lastFrame = null;
     this.stats = { entities: 0, structures: 0, particles: 0, lights: 0 };
@@ -327,7 +327,7 @@ export class Renderer {
   // Decoration variants are bucketed once per chunk, so a frame only changes
   // drawing state a handful of times per chunk instead of once per tuft.
   decorationBuckets(chunk) {
-    let buckets = this.decorationBuckets.get(chunk);
+    let buckets = this.decorationCache.get(chunk);
     if (!buckets) {
       buckets = { shade: [], blades: [], stones: [] };
       for (const decoration of chunk.decorations) {
@@ -335,7 +335,7 @@ export class Renderer {
         else if (decoration.variant < 0.55) buckets.blades.push(decoration);
         else if (decoration.variant > 0.86) buckets.stones.push(decoration);
       }
-      this.decorationBuckets.set(chunk, buckets);
+      this.decorationCache.set(chunk, buckets);
     }
     return buckets;
   }

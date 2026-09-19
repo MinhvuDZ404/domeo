@@ -72,6 +72,16 @@ test('settings controls are wired to the settings keys the game reads', () => {
     assert.match(ui, new RegExp(`\\b${key}\\b`));
 });
 
+test('the volume slider is a 0-100 control scaled exactly once', () => {
+  const slider = /id="settings-volume"[\s\S]{0,320}?>/.exec(html)?.[0] ?? '';
+  assert.match(slider, /min="0"/);
+  assert.match(slider, /max="100"/);
+  assert.match(ui, /percentToVolume/);
+  assert.match(ui, /volumeToPercent/);
+  // The old bug multiplied the 0-100 slider value by 100 instead of dividing it.
+  assert.doesNotMatch(ui, /volume\.value\)\s*\*\s*100/);
+});
+
 test('the stylesheet styles every class the settings dialog relies on', () => {
   for (const selector of ['.settings-dialog', '.settings-list', '.settings-row', '.debug-overlay'])
     assert.ok(styles.includes(selector), `${selector} has no styles`);

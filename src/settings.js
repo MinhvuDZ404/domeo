@@ -14,12 +14,25 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 const number = (value) => typeof value === 'number' && Number.isFinite(value);
 
+// The slider is a 0-100 control while the stored volume is a 0-1 fraction.
+// Both conversions live here so the two scales cannot drift apart again.
+export const clampVolume = (value) =>
+  value !== '' && value !== null && Number.isFinite(Number(value))
+    ? Math.min(1, Math.max(0, Number(value)))
+    : DEFAULT_SETTINGS.volume;
+export const volumeToPercent = (volume) => Math.round(clampVolume(volume) * 100);
+// An empty or missing slider value falls back to the default instead of muting.
+export const percentToVolume = (percent) =>
+  percent === '' || percent === null || percent === undefined
+    ? DEFAULT_SETTINGS.volume
+    : clampVolume(Number(percent) / 100);
+
 // Unknown keys are dropped and broken values fall back to the default, so a
 // stale or hand-edited entry cannot break the game.
 export function normalizeSettings(value) {
   const source = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const settings = { ...DEFAULT_SETTINGS };
-  if (number(source.volume)) settings.volume = Math.min(1, Math.max(0, source.volume));
+  if (number(source.volume)) settings.volume = clampVolume(source.volume);
   for (const key of ['ambient', 'particles', 'debug'])
     if (typeof source[key] === 'boolean') settings[key] = source[key];
   if (MOTION_MODES.includes(source.motion)) settings.motion = source.motion;

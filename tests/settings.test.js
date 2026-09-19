@@ -4,8 +4,10 @@ import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
   normalizeSettings,
+  percentToVolume,
   readSettings,
   validateSettings,
+  volumeToPercent,
   writeSettings,
 } from '../src/settings.js';
 
@@ -97,4 +99,20 @@ test('unknown keys never leak into saved settings', () => {
   assert.equal(validateSettings(normalized), true);
   assert.equal(validateSettings({ ...DEFAULT_SETTINGS, mystery: 'x' }), false);
   assert.equal(validateSettings({ ...DEFAULT_SETTINGS, motion: 'on' }), true);
+});
+
+test('the volume slider scale and the stored fraction stay in sync', () => {
+  assert.equal(volumeToPercent(0.7), 70);
+  assert.equal(percentToVolume('70'), 0.7);
+  assert.equal(percentToVolume(70), 0.7, 'a raw percent is divided, never stored as 70');
+  assert.equal(percentToVolume(150), 1, 'anything above 100% is clamped');
+  assert.equal(percentToVolume(0), 0);
+  assert.equal(percentToVolume(100), 1);
+  assert.equal(volumeToPercent(2), 100);
+  assert.equal(volumeToPercent(-1), 0);
+  assert.equal(percentToVolume(''), DEFAULT_SETTINGS.volume);
+  assert.equal(volumeToPercent(undefined), 70);
+  // Round-tripping a slider step must be stable: 70 -> 0.7 -> 70.
+  for (const percent of [0, 5, 35, 55, 70, 95, 100])
+    assert.equal(volumeToPercent(percentToVolume(percent)), percent);
 });

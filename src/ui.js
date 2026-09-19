@@ -1,5 +1,5 @@
 import { ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
-import { MOTION_MODES } from './settings.js';
+import { MOTION_MODES, percentToVolume, volumeToPercent } from './settings.js';
 import { icon, fillIcons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,8 +74,10 @@ export class UI {
       .forEach((button) => button.addEventListener('click', () => action('escape')));
     const volume = $('settings-volume');
     volume.addEventListener('input', () => {
-      $('settings-volume-value').textContent = `${Math.round(Number(volume.value) * 100)}%`;
-      setting('volume', Number(volume.value));
+      // The slider reports 0-100; settings store a 0-1 fraction.
+      const level = percentToVolume(volume.value);
+      $('settings-volume-value').textContent = `${volumeToPercent(level)}%`;
+      setting('volume', level);
     });
     for (const key of ['ambient', 'particles', 'debug'])
       $(`settings-${key}`).addEventListener('change', (event) =>
@@ -124,7 +126,7 @@ export class UI {
   }
   // `debug` may differ from the stored setting when ?debug=1 asked for it.
   syncSettings(settings, { debug = settings.debug } = {}) {
-    const volume = Math.round(settings.volume * 100);
+    const volume = volumeToPercent(settings.volume);
     $('settings-volume').value = String(volume);
     $('settings-volume-value').textContent = `${volume}%`;
     for (const key of ['ambient', 'particles']) $(`settings-${key}`).checked = settings[key];
