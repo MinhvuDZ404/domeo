@@ -1,32 +1,433 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Top-Down Game (Infinite World)</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a1a;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-        }
-        canvas {
-            border: 4px solid #ffffff;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <!-- Query string tránh trình duyệt/GitHub Pages giữ main.js phiên bản cũ trong cache. -->
-    <script src="main.js?v=infinite-world-2"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#182b22" />
+    <meta
+      name="description"
+      content="Một khu rừng không có ranh giới. Khám phá, hái lượm và xây nơi dừng chân của riêng bạn trong Domeo."
+    />
+    <title>Domeo — Một chuyến đi hoang dã</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="main.js"></script>
+  </head>
+  <body>
+    <main id="app" class="in-menu">
+      <canvas
+        id="gameCanvas"
+        aria-label="Thế giới rừng Domeo. Di chuyển bằng WASD hoặc phím mũi tên, E để hái lượm, F để ăn, B mở túi đồ."
+      ></canvas>
+      <div class="world-vignette" aria-hidden="true"></div>
+      <div class="menu-shade" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" data-icon="leaf" data-size="28"></span
+          ><span class="wordmark">domeo<span>.</span></span
+          ><span class="brand-divider"></span
+          ><span class="brand-caption">MỘT CHUYẾN ĐI<br />HOANG DÃ</span>
+        </div>
+        <div id="world-clock" class="world-clock" hidden>
+          <span id="time-icon" data-icon="sun" data-size="22"></span>
+          <div>
+            <strong id="day-label">NGÀY 01</strong
+            ><span id="clock-label">10:48 · Nắng trong rừng</span>
+          </div>
+        </div>
+        <nav class="top-actions" aria-label="Điều khiển trò chơi">
+          <button
+            id="save-button"
+            class="icon-button save-button"
+            title="Lưu tiến trình"
+            aria-label="Lưu tiến trình"
+            hidden
+          >
+            <span data-icon="save" data-size="19"></span><span id="save-label">Lưu</span>
+          </button>
+          <button
+            id="sound-button"
+            class="icon-button"
+            title="Bật âm thanh"
+            aria-label="Bật âm thanh"
+            aria-pressed="false"
+          >
+            <span data-icon="muted" data-size="20"></span>
+          </button>
+          <button id="help-button" class="icon-button" title="Cách chơi" aria-label="Cách chơi">
+            <span data-icon="help" data-size="21"></span>
+          </button>
+          <button
+            id="pause-button"
+            class="icon-button"
+            title="Tạm dừng (Esc)"
+            aria-label="Tạm dừng"
+            hidden
+          >
+            <span data-icon="pause" data-size="20"></span>
+          </button>
+        </nav>
+      </header>
+
+      <section id="main-menu" class="main-menu" aria-labelledby="menu-title">
+        <div class="menu-copy">
+          <div class="eyebrow"><span class="small-line"></span> BỎ LẠI NHỮNG ỒN ÀO</div>
+          <h1 id="menu-title">
+            Đi lạc một chút.<br /><em>Sống chậm<br />một chút.</em>
+          </h1>
+          <p class="menu-intro">
+            Chỉ bạn và một khu rừng không có ranh giới.<br />Hái lượm, chế tạo, thắp một đốm lửa.<br />Viết
+            nên câu chuyện sinh tồn của riêng mình.
+          </p>
+          <div class="menu-buttons">
+            <button id="continue-button" class="button button-primary" hidden>
+              <span data-icon="play" data-size="18"></span> Tiếp tục hành trình
+            </button>
+            <button id="new-button" class="button button-primary" disabled>
+              <span id="new-label">Bắt đầu khám phá</span
+              ><span data-icon="arrow" data-size="20"></span>
+            </button>
+          </div>
+          <p id="menu-save-note" class="menu-note">
+            <span class="status-dot"></span> Không vội vàng. Cứ đi theo cách của bạn.
+          </p>
+        </div>
+        <div class="world-caption" aria-hidden="true">
+          <span class="caption-rule"></span><span>01 / KHU RỪNG THỨC GIẤC</span
+          ><small>Mọi hành trình đều bắt đầu từ một bước chân.</small>
+        </div>
+        <div class="menu-compass" aria-hidden="true">
+          <span>N</span
+          ><svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="38" />
+            <circle cx="50" cy="50" r="33" stroke-dasharray="1 7" />
+            <path class="needle-light" d="M50 14 57 50 50 45 43 50Z" />
+            <path class="needle-dark" d="M50 86 57 50 50 55 43 50Z" />
+            <circle cx="50" cy="50" r="3" />
+          </svg>
+        </div>
+        <footer class="menu-footer">
+          <div class="menu-controls">
+            <span><kbd>W A S D</kbd> Di chuyển</span><span><kbd>E</kbd> Hái lượm</span
+            ><span><kbd>B</kbd> Túi đồ</span>
+          </div>
+          <span class="edition">THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v2.0</i></span>
+        </footer>
+      </section>
+
+      <section id="game-hud" aria-label="Trạng thái nhân vật" hidden>
+        <div class="vitals-card glass-panel">
+          <div class="vital">
+            <span class="vital-icon health-color" data-icon="heart" data-size="18"></span>
+            <div class="vital-content">
+              <div class="vital-label">
+                <span>SỨC KHỎE</span><strong id="health-value">100 <small>/ 100</small></strong>
+              </div>
+              <div
+                id="health-bar"
+                class="meter health-meter"
+                role="progressbar"
+                aria-label="Sức khỏe"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="100"
+              >
+                <span></span>
+              </div>
+            </div>
+          </div>
+          <div class="vital">
+            <span class="vital-icon hunger-color" data-icon="bowl" data-size="18"></span>
+            <div class="vital-content">
+              <div class="vital-label">
+                <span>ĐỘ NO</span><strong id="hunger-value">100 <small>/ 100</small></strong>
+              </div>
+              <div
+                id="hunger-bar"
+                class="meter hunger-meter"
+                role="progressbar"
+                aria-label="Độ no"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="100"
+              >
+                <span></span>
+              </div>
+            </div>
+          </div>
+          <div class="location-label">
+            <span data-icon="pin" data-size="13"></span> Rừng tĩnh lặng
+            <span id="coordinates">0, 0</span>
+          </div>
+        </div>
+        <aside class="journal-card glass-panel" aria-label="Mục tiêu khởi đầu">
+          <button id="journal-toggle" class="journal-heading" aria-expanded="true">
+            <span><span data-icon="leaf" data-size="17"></span> BƯỚC CHÂN ĐẦU TIÊN</span
+            ><small id="goal-count">0/5</small>
+          </button>
+          <ol id="goal-list"></ol>
+          <div class="journal-footer">Mỗi điều nhỏ bé, một khởi đầu.</div>
+        </aside>
+        <div id="interaction-prompt" class="interaction-prompt" hidden>
+          <kbd>E</kbd><span id="interaction-label">Hái quả mọng</span
+          ><small id="interaction-detail">Giữ để tiếp tục</small>
+        </div>
+        <div id="placement-bar" class="placement-bar glass-panel" hidden>
+          <span data-icon="hammer" data-size="20"></span>
+          <div>
+            <strong id="placement-name">Đặt lửa trại</strong
+            ><small>Nhấp chỗ trống gần bạn, hoặc nhấn E</small>
+          </div>
+          <button id="cancel-placement" class="text-button">Hủy <kbd>Esc</kbd></button>
+        </div>
+        <div class="bottom-dock">
+          <div class="hotbar glass-panel" aria-label="Truy cập nhanh">
+            <button
+              class="hotbar-slot"
+              data-slot="berry"
+              aria-label="Ăn quả mọng (F hoặc 1)"
+              title="Ăn quả (F / 1)"
+            >
+              <kbd>1</kbd><span data-icon="berry" data-size="29"></span
+              ><span class="slot-count" data-count="berry">3</span
+              ><span class="slot-name">Ăn quả</span>
+            </button>
+            <button
+              class="hotbar-slot"
+              data-slot="axe"
+              aria-label="Rìu đá (2)"
+              title="Rìu đá · Tự dùng khi chặt cây"
+            >
+              <kbd>2</kbd><span data-icon="axe" data-size="29"></span
+              ><span class="slot-count" data-count="axe">0</span
+              ><span class="slot-name">Rìu đá</span>
+            </button>
+            <button
+              class="hotbar-slot"
+              data-slot="pickaxe"
+              aria-label="Cuốc đá (3)"
+              title="Cuốc đá · Tự dùng khi đào đá"
+            >
+              <kbd>3</kbd><span data-icon="pickaxe" data-size="29"></span
+              ><span class="slot-count" data-count="pickaxe">0</span
+              ><span class="slot-name">Cuốc đá</span>
+            </button>
+            <button
+              class="hotbar-slot"
+              data-slot="campfire"
+              aria-label="Đặt lửa trại (4)"
+              title="Đặt lửa trại (4)"
+            >
+              <kbd>4</kbd><span data-icon="fire" data-size="29"></span
+              ><span class="slot-count" data-count="campfire">0</span
+              ><span class="slot-name">Lửa trại</span>
+            </button>
+            <button
+              class="hotbar-slot"
+              data-slot="torch"
+              aria-label="Bật hoặc tắt đuốc (5)"
+              title="Bật / tắt đuốc (5)"
+            >
+              <kbd>5</kbd><span data-icon="torch" data-size="29"></span
+              ><span class="slot-count" data-count="torch">0</span
+              ><span class="slot-name">Đuốc</span>
+            </button>
+            <button
+              class="hotbar-slot"
+              data-slot="wall"
+              aria-label="Đặt hàng rào (6)"
+              title="Đặt hàng rào (6)"
+            >
+              <kbd>6</kbd><span data-icon="wall" data-size="29"></span
+              ><span class="slot-count" data-count="wall">0</span
+              ><span class="slot-name">Hàng rào</span>
+            </button>
+            <span class="hotbar-divider"></span>
+            <button
+              id="inventory-button"
+              class="hotbar-slot inventory-slot"
+              aria-label="Mở túi đồ (B)"
+              title="Túi đồ (B) · Chế tạo (C)"
+            >
+              <kbd>B</kbd><span data-icon="bag" data-size="27"></span
+              ><span class="slot-name">Túi đồ</span>
+            </button>
+          </div>
+          <p class="dock-hint">
+            <span><kbd>WASD</kbd> di chuyển</span><span><kbd>E</kbd> tương tác</span
+            ><span><kbd>C</kbd> chế tạo</span><span><kbd>Esc</kbd> nghỉ chân</span>
+          </p>
+        </div>
+        <div id="mobile-controls" class="mobile-controls">
+          <div id="joystick" class="joystick" role="group" aria-label="Cần điều khiển cảm ứng">
+            <div class="joystick-cross"></div>
+            <div id="joystick-knob" class="joystick-knob">
+              <span data-icon="compass" data-size="24"></span>
+            </div>
+          </div>
+          <div class="touch-actions">
+            <button id="touch-eat" class="touch-button touch-eat" aria-label="Ăn quả">
+              <span data-icon="berry" data-size="23"></span></button
+            ><button id="touch-interact" class="touch-button touch-interact" aria-label="Tương tác">
+              <span data-icon="hand" data-size="26"></span><small>HÁI LƯỢM</small>
+            </button>
+          </div>
+        </div>
+      </section>
+      <div
+        id="toast-region"
+        class="toast-region"
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+      ></div>
+      <div id="loading-state" class="loading-state" role="status">
+        <span class="loading-spinner"></span> Đang đánh thức khu rừng…
+      </div>
+    </main>
+
+    <dialog id="inventory-dialog" class="drawer-dialog" aria-labelledby="inventory-title">
+      <div class="drawer-header">
+        <div>
+          <span class="paper-eyebrow">MANG THEO MỘT CHÚT RỪNG</span>
+          <h2 id="inventory-title">Túi của bạn<span>.</span></h2>
+        </div>
+        <button class="paper-icon-button" data-close aria-label="Đóng túi đồ">
+          <span data-icon="close" data-size="22"></span>
+        </button>
+      </div>
+      <div class="inventory-tabs" role="tablist" aria-label="Túi đồ và chế tạo">
+        <button
+          id="bag-tab"
+          role="tab"
+          aria-selected="true"
+          aria-controls="bag-panel"
+          data-tab="bag"
+        >
+          <span data-icon="bag" data-size="18"></span> Hành trang
+          <span id="bag-total">3</span></button
+        ><button
+          id="craft-tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="craft-panel"
+          tabindex="-1"
+          data-tab="craft"
+        >
+          <span data-icon="hammer" data-size="18"></span> Chế tạo
+        </button>
+      </div>
+      <section id="bag-panel" class="inventory-panel" role="tabpanel" aria-labelledby="bag-tab">
+        <p class="section-note">Những điều bạn nhặt được trên đường.</p>
+        <div id="inventory-grid" class="inventory-grid"></div>
+        <div id="item-detail" class="item-detail"></div>
+        <button id="item-action" class="button button-dark item-action" hidden>Sử dụng</button>
+      </section>
+      <section
+        id="craft-panel"
+        class="inventory-panel"
+        role="tabpanel"
+        aria-labelledby="craft-tab"
+        hidden
+      >
+        <p class="section-note">Từ những thứ giản đơn, làm nên điều hữu ích.</p>
+        <div id="recipe-list" class="recipe-list"></div>
+      </section>
+      <footer class="drawer-footer">
+        <span class="status-dot"></span> Thế giới đang tạm dừng. Cứ thong thả nhé.
+      </footer>
+    </dialog>
+
+    <dialog id="pause-dialog" class="paper-dialog" aria-labelledby="pause-title">
+      <div class="dialog-ornament" data-icon="leaf" data-size="32"></div>
+      <span class="paper-eyebrow">MỘT KHOẢNG LẶNG</span>
+      <h2 id="pause-title">Rừng vẫn ở đây.</h2>
+      <p>Hít thở một chút. Hành trình sẽ tiếp tục<br />khi bạn sẵn sàng.</p>
+      <div class="dialog-buttons">
+        <button id="resume-button" class="button button-dark">
+          <span data-icon="play" data-size="18"></span> Tiếp tục khám phá</button
+        ><button id="pause-save-button" class="button button-outline">
+          <span data-icon="save" data-size="18"></span> Lưu hành trình</button
+        ><button id="home-button" class="text-button">
+          Về màn hình chính <span data-icon="arrow" data-size="16"></span>
+        </button>
+      </div>
+      <small class="dialog-footnote">Thời gian và độ no đều tạm dừng.</small>
+    </dialog>
+
+    <dialog id="help-dialog" class="paper-dialog help-dialog" aria-labelledby="help-title">
+      <button class="paper-icon-button dialog-close" data-close aria-label="Đóng hướng dẫn">
+        <span data-icon="close" data-size="22"></span></button
+      ><span class="paper-eyebrow">SỔ TAY BỎ TÚI</span>
+      <h2 id="help-title">Sống cùng khu rừng.</h2>
+      <p>Không cần biết mọi thứ. Bắt đầu từ những điều nhỏ.</p>
+      <div class="help-grid">
+        <div>
+          <kbd>WASD / ↑↓←→</kbd><strong>Bước vào thế giới</strong
+          ><span>Di chuyển và khám phá. Trên điện thoại, dùng cần điều khiển góc trái.</span>
+        </div>
+        <div>
+          <kbd>E</kbd><strong>Nhặt một chút thiên nhiên</strong
+          ><span>Giữ E gần tài nguyên để hái lượm. Cây cần rìu, tảng đá cần cuốc.</span>
+        </div>
+        <div>
+          <kbd>F / 1</kbd><strong>Đừng để bụng đói</strong
+          ><span>Ăn quả để hồi 25 no và 3 máu. Hết no sẽ mất máu dần.</span>
+        </div>
+        <div>
+          <kbd>B / C</kbd><strong>Mang theo & chế tạo</strong
+          ><span>Mở túi đồ hoặc công thức. Công cụ được sử dụng tự động.</span>
+        </div>
+        <div>
+          <kbd>4 / 6</kbd><strong>Một nơi để trở về</strong
+          ><span>Đặt lửa trại hoặc hàng rào ở chỗ trống gần bạn. Gần lửa, đủ no sẽ hồi máu.</span>
+        </div>
+        <div>
+          <kbd>5 / Esc</kbd><strong>Khi đêm xuống</strong
+          ><span>Bật đuốc bằng 5. Esc để hủy xây hoặc tạm dừng. Tự lưu mỗi 15 giây.</span>
+        </div>
+      </div>
+      <div class="help-note">
+        <span data-icon="save" data-size="19"></span
+        ><span
+          >Tiến trình lưu trên trình duyệt này, không đồng bộ sang thiết bị khác. Thời gian không
+          trôi khi bạn rời game.</span
+        >
+      </div>
+      <button class="button button-dark" data-close>
+        Mình sẵn sàng rồi <span data-icon="arrow" data-size="18"></span>
+      </button>
+    </dialog>
+
+    <dialog id="gameover-dialog" class="paper-dialog" aria-labelledby="gameover-title">
+      <div class="dialog-ornament" data-icon="moon" data-size="32"></div>
+      <span class="paper-eyebrow">HẸN GẶP LẠI, NGƯỜI LỮ KHÁCH</span>
+      <h2 id="gameover-title">Một hành trình<br />khép lại.</h2>
+      <p>Bạn đã kiệt sức. Nhưng khu rừng vẫn còn<br />rất nhiều câu chuyện đang đợi.</p>
+      <div id="journey-stats" class="journey-stats"></div>
+      <div class="dialog-buttons">
+        <button id="restart-button" class="button button-dark">
+          <span data-icon="reset" data-size="18"></span> Bắt đầu lại</button
+        ><button id="death-home-button" class="text-button">Về màn hình chính</button>
+      </div>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="paper-dialog" aria-labelledby="confirm-title">
+      <div class="dialog-ornament" data-icon="compass" data-size="32"></div>
+      <span class="paper-eyebrow">MỘT LỐI ĐI MỚI</span>
+      <h2 id="confirm-title">Bắt đầu lại nhé?</h2>
+      <p>Chuyến đi mới sẽ thay thế bản lưu hiện tại<br />trên trình duyệt này.</p>
+      <div class="dialog-buttons">
+        <button id="confirm-new-button" class="button button-dark">
+          Bắt đầu chuyến đi mới <span data-icon="arrow" data-size="18"></span></button
+        ><button class="button button-outline" data-close>Giữ lại hành trình cũ</button>
+      </div>
+    </dialog>
+    <noscript
+      ><div class="noscript">
+        Domeo cần JavaScript để khu rừng thức giấc. Hãy bật JavaScript trong trình duyệt của bạn.
+      </div></noscript
+    >
+  </body>
 </html>

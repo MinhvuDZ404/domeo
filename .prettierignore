@@ -1,0 +1,4 @@
+node_modules/
+.cache/
+assets/fonts/
+package-lock.json
