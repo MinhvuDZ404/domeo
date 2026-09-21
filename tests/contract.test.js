@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { ITEMS } from '../src/config.js';
+import { UI } from '../src/ui.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = (path) => readFile(`${root}${path}`, 'utf8');
@@ -87,4 +88,39 @@ test('the stylesheet styles every class the settings dialog relies on', () => {
     assert.ok(styles.includes(selector), `${selector} has no styles`);
   assert.match(html, /class="[^"]*settings-dialog/);
   assert.match(html, /id="debug-overlay"/);
+});
+
+// A method the UI calls but never defines used to stop the whole render loop
+// (the chest opened, UI.renderInventory threw, and requestAnimationFrame was
+// never scheduled again), so the game froze on the first frame of a journey.
+test('every method the UI calls on itself exists', () => {
+  const defined = new Set(Object.getOwnPropertyNames(UI.prototype));
+  for (const match of ui.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=/g)) defined.add(match[1]);
+  const called = [...ui.matchAll(/this\.([A-Za-z_$][\w$]*)\s*\(/g)].map((match) => match[1]);
+  assert.deepEqual(
+    [...new Set(called)].filter((name) => !defined.has(name)),
+    [],
+  );
+});
+
+test('every helper the modules call on self is defined in the same file', async () => {
+  const missing = [];
+  for (const file of [
+    'src/game.js',
+    'src/world.js',
+    'src/renderer.js',
+    'src/sound.js',
+    'src/input.js',
+  ]) {
+    const source = await read(file);
+    const defined = new Set([
+      ...[
+        ...source.matchAll(/^\s{2}(?:static\s+|async\s+|get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*\(/gm),
+      ].map((match) => match[1]),
+      ...[...source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=/g)].map((match) => match[1]),
+    ]);
+    for (const match of source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*\(/g))
+      if (!defined.has(match[1])) missing.push(`${file}: this.${match[1]}()`);
+  }
+  assert.deepEqual(missing, []);
 });

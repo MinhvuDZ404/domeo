@@ -3,6 +3,35 @@
 Mọi thay đổi đáng chú ý của Domeo được ghi ở đây. Game hiển thị phiên bản trong mục **Cài đặt**
 (phím `O`, phần cuối hộp thoại) và ở `src/config.js`.
 
+## 4.0.1 — 21/09/2026
+
+Bản sửa nhanh cho 4.0: **trò chơi đơ ngay khi bắt đầu hành trình**.
+
+### Đã sửa
+
+- **Đơ nhân vật:** `UI.render()` gọi `renderWayfinding()` và `renderInventory()` gọi `renderChest()`,
+  hai hàm chưa từng được viết. Lỗi ném ra từ vòng lặp vẽ nên `requestAnimationFrame` không bao giờ
+  được đặt lại — khung hình đứng yên và nhân vật không nhúc nhích. Hai hàm nay đã có: la bàn chỉ
+  hướng cùng khoảng cách tới nhà, bản đồ nhỏ vẽ những chunk đã đi qua.
+- **Chuyển đồ với rương:** các nút trong rương gọi một biến không tồn tại nên mọi cú nhấp đều lỗi.
+  Cất và lấy đồ nay đi qua hàm `transfer` được truyền vào `UI`, đúng như phần còn lại của giao diện.
+- Tab **Rương** chỉ hiện khi có rương đang mở; điều hướng bằng phím mũi tên bỏ qua tab đang ẩn.
+- **Thanh đồ tràn ra ngoài màn hình 320 px:** bản 4.0 thêm ô thứ bảy (Rương) nên dãy ô
+  vượt khỏi mép phải. Trên màn hình hẹp, các ô nay chia đều bề ngang còn lại thay vì giữ
+  nguyên kích thước, và thẻ la bàn/bản đồ nhỏ tự xuống dòng. Kịch bản trình duyệt kiểm tra
+  bố cục dọc và ngang đã bắt được lỗi này.
+
+### Kiểm thử
+
+- Thêm kiểm thử tĩnh: mọi `this.<tên>()` trong `src/ui.js` phải tồn tại, và một lượt kiểm tra tương
+  tự cho các module còn lại — bộ kiểm thử logic sẽ báo ngay nếu lại thiếu một hàm như hai hàm trên.
+- Thêm hai kịch bản trình duyệt: mở rương, cất rồi lấy lại đồ và đi tiếp mà thế giới vẫn chạy; và
+  la bàn cùng bản đồ nhỏ bám theo nhà đã đánh dấu.
+- `tests/upgrade.test.js` được định dạng lại. `format:check` đã chặn CI ngay từ bước đầu ở lần chạy
+  4.0, nên `npm test` và toàn bộ kịch bản trình duyệt bị bỏ qua — đó là lý do lỗi này lọt ra ngoài.
+
+Số kiểm thử logic: 69 → **71**; kịch bản trình duyệt: 20 → **22**.
+
 ## 4.0.0 — 21/09/2026
 
 Bản **Một nơi để trở về**: vòng chơi có căn cứ thật, la bàn, và bản lưu được nâng cấp an toàn.

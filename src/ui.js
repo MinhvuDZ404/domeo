@@ -1,4 +1,4 @@
-import { ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
+import { CHUNK_SIZE, ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
 import { MOTION_MODES, percentToVolume, volumeToPercent } from './settings.js';
 import { icon, fillIcons } from './icons.js';
 
@@ -9,8 +9,17 @@ const MOTION_LABELS = {
   off: 'Luôn bật đầy đủ',
 };
 export class UI {
-  constructor({ action, craft, useItem, selectTab, setting = () => {}, resetSettings = () => {} }) {
+  constructor({
+    action,
+    craft,
+    useItem,
+    selectTab,
+    transfer = () => {},
+    setting = () => {},
+    resetSettings = () => {},
+  }) {
     this.action = action;
+    this.transfer = transfer;
     this.selectedItem = 'berry';
     this.tab = 'bag';
     this.lastGoalSignature = '';
@@ -37,15 +46,15 @@ export class UI {
       if (card) {
         this.selectedItem = card.dataset.item;
         this.renderInventory(this.game);
-        if (this.game?.openChest && event.detail === 2) transfer(card.dataset.item, true);
+        if (this.game?.openChest && event.detail === 2) this.transfer(card.dataset.item, true);
       }
     });
     $('chest-grid')?.addEventListener('click', (event) => {
       const card = event.target.closest('[data-chest]');
-      if (card) transfer(card.dataset.chest, false);
+      if (card) this.transfer(card.dataset.chest, false);
     });
     $('stash-selected')?.addEventListener('click', () => {
-      if (this.selectedItem) transfer(this.selectedItem, true);
+      if (this.selectedItem) this.transfer(this.selectedItem, true);
     });
     $('recipe-list').addEventListener('click', (event) => {
       const button = event.target.closest('[data-craft]');
@@ -60,7 +69,9 @@ export class UI {
       button.addEventListener('keydown', (event) => {
         if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
           event.preventDefault();
-          const tabs = ['bag', 'craft', 'chest'].filter((name) => $(`${name}-tab`));
+          const tabs = ['bag', 'craft', 'chest'].filter(
+            (name) => $(`${name}-tab`) && !$(`${name}-tab`).hidden,
+          );
           const index = tabs.indexOf(this.tab);
           const tab =
             event.key === 'Home'
@@ -289,6 +300,98 @@ export class UI {
         .join('');
     }
     if ($('inventory-dialog').open) this.renderInventory(game);
+  }
+  // The needle points at the marked home and the mini-map keeps the chunks
+  // already walked, redrawn from the explored set (the world is never stored).
+  renderWayfinding(game) {
+    const needle = $('compass-needle'),
+      label = $('compass-distance');
+    const compass = game.compass();
+    if (needle) {
+      const degrees = compass ? Math.round((compass.angle * 180) / Math.PI) : 0;
+      if (needle.dataset.angle !== String(degrees)) {
+        needle.dataset.angle = String(degrees);
+        needle.style.transform = `rotate(${degrees}deg)`;
+      }
+      needle.closest('.compass-widget')?.classList.toggle('no-home', !compass);
+    }
+    if (label) {
+      const text = !compass
+        ? 'Chưa có nhà'
+        : compass.distance < 40
+          ? 'Bạn đang ở nhà'
+          : `Cách ${Math.max(1, Math.round(compass.distance / 16))} bước`;
+      if (label.textContent !== text) label.textContent = text;
+    }
+    this.renderMiniMap(game);
+  }
+  renderMiniMap(game) {
+    const canvas = $('mini-map'),
+      ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+    const cell = 12,
+      columns = Math.max(1, Math.floor(canvas.width / cell)),
+      rows = Math.max(1, Math.floor(canvas.height / cell));
+    const originX = Math.floor(game.player.x / CHUNK_SIZE) - Math.floor(columns / 2),
+      originY = Math.floor(game.player.y / CHUNK_SIZE) - Math.floor(rows / 2);
+    ctx.fillStyle = '#16241c';
+    ctx.fillRect(0, 0, columns * cell, rows * cell);
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        if (!game.explored.has(`${originX + column},${originY + row}`)) continue;
+        ctx.fillStyle = '#3d5c46';
+        ctx.fillRect(column * cell, row * cell, cell - 1, cell - 1);
+      }
+    }
+    if (game.home) {
+      const column = Math.floor(game.home.x / CHUNK_SIZE) - originX,
+        row = Math.floor(game.home.y / CHUNK_SIZE) - originY;
+      if (column >= 0 && column < columns && row >= 0 && row < rows) {
+        ctx.fillStyle = '#e0b96a';
+        ctx.fillRect(column * cell + 2, row * cell + 2, cell - 5, cell - 5);
+      }
+    }
+    // The player dot keeps world precision inside their own chunk cell.
+    const x = (game.player.x / CHUNK_SIZE - originX) * cell,
+      y = (game.player.y / CHUNK_SIZE - originY) * cell;
+    ctx.fillStyle = '#f2f6e4';
+    ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 3);
+    ctx.strokeStyle = '#4d6b53';
+    ctx.strokeRect(0.5, 0.5, columns * cell - 1, rows * cell - 1);
+  }
+  // The chest tab is only reachable while a chest is open; its cards mirror the bag.
+  renderChest(game) {
+    const tab = $('chest-tab'),
+      grid = $('chest-grid');
+    const open = !!game.openChest;
+    if (tab) {
+      const wasHidden = tab.hidden;
+      tab.hidden = !open;
+      if (!open && this.tab === 'chest') this.setTab('bag');
+      else if (open && wasHidden) tab.focus();
+    }
+    if (!grid) return;
+    if (!open) {
+      // Nothing lingers in the panel once the chest is left behind.
+      if (grid.childElementCount) grid.replaceChildren();
+      return;
+    }
+    if (!grid.childElementCount) {
+      grid.innerHTML = Object.entries(ITEMS)
+        .map(
+          ([id, item]) =>
+            `<button class="item-card" data-chest="${id}" aria-label="${item.name}"><small>×0</small>${icon(item.icon, 32)}<strong>${item.name}</strong></button>`,
+        )
+        .join('');
+    }
+    for (const card of grid.querySelectorAll('[data-chest]')) {
+      const id = card.dataset.chest,
+        count = game.chest[id] ?? 0;
+      card.querySelector('small').textContent = `×${count}`;
+      card.classList.toggle('empty', count === 0);
+      card.disabled = count === 0;
+      card.setAttribute('aria-label', `${ITEMS[id].name}, ${count}`);
+    }
   }
   renderInventory(game) {
     if (!game) return;

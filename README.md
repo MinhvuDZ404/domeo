@@ -9,6 +9,10 @@ Trang GitHub Pages của dự án: <https://minhvudz404.github.io/domeo/>. Các 
 Bản 4.0 cho bạn **một nơi để trở về**: rương, nướng ăn, la bàn về nhà, bản đồ đã khám phá, và nâng
 cấp bản lưu từ 2.0/3.0 mà không mất thế giới. Chi tiết trong `CHANGELOG.md`.
 
+Bản 4.0.1 sửa lỗi **đơ khi bắt đầu hành trình**: hai hàm vẽ la bàn và rương chưa được viết nên vòng
+lặp vẽ dừng lại ngay khung hình đầu, và lỗi chuyển đồ trong rương. Từ đây bộ kiểm thử logic kiểm tra
+luôn việc mọi hàm mà giao diện gọi đều tồn tại.
+
 ### Nền tảng từ 3.0
 
 ## Có gì trong bản 3.0?
@@ -114,7 +118,7 @@ Rìu, cuốc và đuốc chỉ cần chế tạo một lần. Mỗi loại vật
 
 ```sh
 npm ci
-npm test                 # 67 kiểm thử logic bằng node:test
+npm test                 # 71 kiểm thử logic bằng node:test
 npm run perf             # đo thời gian xử lý mỗi bước và truy vấn vật thể
 npm run perf:check       # thoát mã lỗi nếu vượt ngân sách hiệu năng
 npm run balance          # mô phỏng nhịp chơi, in báo cáo cân bằng
@@ -122,10 +126,10 @@ npm run format:check
 
 # Cài trình duyệt kiểm thử lần đầu; Linux có thể cần --with-deps.
 npx playwright install chromium
-npm run test:e2e         # 20 kịch bản Chromium, gồm giả lập màn hình cảm ứng
+npm run test:e2e         # 22 kịch bản Chromium, gồm giả lập màn hình cảm ứng
 ```
 
-Bộ kiểm thử trình duyệt bao phủ di chuyển, tạm dừng, focus hộp thoại, hái/ăn/chế tạo/đặt công trình, lưu và tải lại, tự lưu, chơi lại, bộ nhớ bị chặn, ảnh dự phòng, đường dẫn con GitHub Pages, joystick, màn hình nhỏ, cài đặt và bảng thông số. Đây là kiểm thử cảm ứng giả lập trong Chromium, **không thay thế kiểm thử trực tiếp trên mọi thiết bị iOS/Android**.
+Bộ kiểm thử trình duyệt bao phủ di chuyển, tạm dừng, focus hộp thoại, hái/ăn/chế tạo/đặt công trình, rương và chuyển đồ, la bàn và bản đồ nhỏ, lưu và tải lại, tự lưu, chơi lại, bộ nhớ bị chặn, ảnh dự phòng, đường dẫn con GitHub Pages, joystick, màn hình nhỏ, cài đặt và bảng thông số. Đây là kiểm thử cảm ứng giả lập trong Chromium, **không thay thế kiểm thử trực tiếp trên mọi thiết bị iOS/Android**.
 
 Nếu môi trường đã cung cấp Chromium ở vị trí riêng, đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE` tới file thực thi đó. Traces/ảnh lỗi nằm trong `.cache/test-results/` và không được đưa vào Git.
 

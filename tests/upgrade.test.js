@@ -33,7 +33,8 @@ function domeoTwoSave() {
 }
 
 test('the release reports itself as 4.0 and writes save version 2', () => {
-  assert.equal(GAME_VERSION, '4.0.0');
+  // A patch release keeps the 4.0 save format and the 2.0/3.0 journeys readable.
+  assert.match(GAME_VERSION, /^4\.0\.\d+$/);
   assert.equal(SAVE_VERSION, 2);
   assert.equal(new Game(1).snapshot().version, 2);
   assert.equal(new Game(1).world.generationVersion, WORLD_GEN_VERSION);
@@ -63,10 +64,7 @@ test('a 2.0 journey still validates, restores and saves without losing anything'
   assert.equal(restored.inventory.axe, 1);
   assert.equal(restored.inventory.cooked, 0);
   assert.deepEqual(restored.world.structures, data.world.structures);
-  assert.equal(
-    restored.world.getState({ id: 'start:0', type: 'bush' }, 96.35).remaining,
-    1,
-  );
+  assert.equal(restored.world.getState({ id: 'start:0', type: 'bush' }, 96.35).remaining, 1);
   restored.update(0.05, { x: 1, y: 0 });
   const saved = restored.snapshot();
   assert.equal(saved.world.seed, 404);
