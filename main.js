@@ -66,12 +66,6 @@ const ui = new UI({
       save(false);
     }
   },
-  upgradeCamp: () => {
-    if (game.upgradeCamp()) {
-      handleEvents();
-      save(false);
-    } else handleEvents();
-  },
 });
 const input = new Input({
   active: () => mode === 'playing',
@@ -294,13 +288,7 @@ function handleAction(action) {
     return;
   }
   if (mode !== 'playing') return;
-  if (action === 'attack') {
-    game.attack();
-    handleEvents();
-  } else if (action === 'camp') {
-    ui.openCamp(game);
-    setMode('inventory');
-  } else if (action === 'interact') {
+  if (action === 'interact') {
     if (game.placement) {
       const point = mousePoint || game.placementPoint();
       game.place(point.x, point.y);
@@ -342,17 +330,6 @@ function handleEvents() {
       renderer.addShake(0.35);
       save(false);
       if (event.text) ui.toast(event.text);
-    } else if (event.type === 'hit' || event.type === 'playerHit') {
-      renderer.addEffect(event);
-      renderer.addBurst(event.type === 'hit' ? 'spark' : 'deny', event.x, event.y);
-      renderer.addShake(event.type === 'playerHit' ? 0.28 : 0.12);
-    } else if (event.type === 'enemyDeath') {
-      renderer.addEffect(event);
-      renderer.addBurst('glow', event.x, event.y);
-    } else if (event.type === 'campUpgrade' || event.type === 'quest') {
-      if (event.x !== undefined) renderer.addBurst('glow', event.x, event.y);
-      if (event.text) ui.toast(event.text);
-      save(false);
     } else if (event.type === 'death') {
       setMode('gameover');
       save(false);

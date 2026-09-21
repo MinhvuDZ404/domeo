@@ -34,14 +34,6 @@ import {
   getWeather,
 } from './config.js';
 import { World } from './world.js';
-import { CombatSystem } from './combat.js';
-import {
-  CAMP_LEVELS,
-  QUESTS,
-  activeQuest,
-  createProgression,
-  sanitizeProgression,
-} from './progression.js';
 
 export class Game {
   constructor(seed = (Math.random() * 0xffffffff) >>> 0) {
@@ -74,10 +66,6 @@ export class Game {
     this.stepAcc = 0;
     this.wasNight = getDayInfo(0).isNight;
     this.discoverAt = 0;
-    this.camp = { level: 1 };
-    this.progression = createProgression();
-    this.combat = new CombatSystem(this.world.seed);
-    this.questCheckAt = 0;
   }
   emit(type, data = {}) {
     if (this.events.length > 200) this.events.shift();
@@ -118,16 +106,9 @@ export class Game {
   }
   compass() {
     if (!this.home) return null;
-    let target = this.home;
-    let label = 'home';
-    if (this.camp.level >= 3 && !this.progression.guardianDefeated) {
-      const angle = (this.world.seed % 628) / 100;
-      target = { x: this.home.x + Math.cos(angle) * 1450, y: this.home.y + Math.sin(angle) * 1450 };
-      label = 'guardian';
-    }
-    const dx = target.x - this.player.x,
-      dy = target.y - this.player.y;
-    return { distance: Math.hypot(dx, dy), angle: Math.atan2(dx, -dy), label };
+    const dx = this.home.x - this.player.x,
+      dy = this.home.y - this.player.y;
+    return { distance: Math.hypot(dx, dy), angle: Math.atan2(dx, -dy) };
   }
   checkDiscoveries() {
     if (this.world.generationVersion < 2) return;
@@ -220,11 +201,6 @@ export class Game {
     } else this.stepAcc = 0;
     this.markExplored();
     this.checkDiscoveries();
-    this.combat.update(this, dt);
-    if (this.elapsed >= this.questCheckAt) {
-      this.questCheckAt = this.elapsed + 0.25;
-      this.checkQuests();
-    }
     if (this.openChest && !this.nearChest()) this.openChest = false;
     if (this.elapsed >= this.pruneAt) {
       this.world.prune(this.elapsed);
@@ -329,72 +305,6 @@ export class Game {
     this.emit('gather', { x: target.x, y: target.y, text, item: reward });
     return true;
   }
-  attack() {
-    return this.combat.attack(this);
-  }
-  currentQuest() {
-    const quest = activeQuest(this);
-    return {
-      id: quest.id,
-      title: quest.title,
-      description: quest.description,
-      progress: quest.progress(this),
-      done: this.progression.completed.includes(quest.id),
-    };
-  }
-  checkQuests() {
-    // Journey quests unlock in order. Rewards are committed in the same
-    // synchronous transaction as completion, so rapid input/reload cannot claim twice.
-    const quest = QUESTS.find((q) => !this.progression.completed.includes(q.id));
-    if (!quest || !quest.test(this)) return false;
-    const reward = Object.entries(quest.reward ?? {});
-    if (reward.some(([item, count]) => this.inventory[item] > MAX_STACK - count)) return false;
-    this.progression.completed.push(quest.id);
-    if (!this.progression.claimed.includes(quest.id)) {
-      for (const [item, count] of reward) this.inventory[item] += count;
-      this.progression.claimed.push(quest.id);
-    }
-    this.emit('quest', { quest: quest.id, text: `Hoàn thành: ${quest.title}` });
-    return true;
-  }
-  campUpgradeInfo() {
-    const next = CAMP_LEVELS.find((entry) => entry.level === this.camp.level + 1);
-    return { current: CAMP_LEVELS[this.camp.level - 1], next: next ?? null };
-  }
-  canUpgradeCamp() {
-    const next = this.campUpgradeInfo().next;
-    if (
-      !next ||
-      !this.home ||
-      Math.hypot(this.player.x - this.home.x, this.player.y - this.home.y) > 150
-    )
-      return false;
-    return Object.entries(next.costs).every(([id, count]) => this.inventory[id] >= count);
-  }
-  upgradeCamp() {
-    const next = this.campUpgradeInfo().next;
-    if (!next) {
-      this.emit('message', { text: 'Căn trại đã đạt cấp cao nhất.' });
-      return false;
-    }
-    if (!this.home || Math.hypot(this.player.x - this.home.x, this.player.y - this.home.y) > 150) {
-      this.emit('message', { text: 'Hãy trở về gần lửa trại để nâng cấp.', tone: 'warning' });
-      return false;
-    }
-    if (!this.canUpgradeCamp()) {
-      this.emit('message', { text: 'Chưa đủ vật liệu cho lần nâng cấp này.', tone: 'warning' });
-      return false;
-    }
-    for (const [id, count] of Object.entries(next.costs)) this.inventory[id] -= count;
-    this.camp.level = next.level;
-    this.emit('campUpgrade', {
-      x: this.home.x,
-      y: this.home.y,
-      text: `${next.name} đã hoàn thành · ${next.benefit}`,
-    });
-    this.checkQuests();
-    return true;
-  }
   eat(item = 'berry') {
     if (this.dead) return false;
     const foods = {
@@ -482,7 +392,6 @@ export class Game {
       !this.dead &&
       (!recipe.unique || this.inventory[id] === 0) &&
       this.inventory[id] < MAX_STACK &&
-      (!recipe.campLevel || this.camp.level >= recipe.campLevel) &&
       Object.entries(recipe.costs).every(([item, count]) => this.inventory[item] >= count)
     );
   }
@@ -651,13 +560,6 @@ export class Game {
       chest: { ...this.chest },
       explored: [...this.explored],
       discovered: [...this.discovered],
-      camp: { level: this.camp.level },
-      progression: {
-        ...this.progression,
-        completed: [...this.progression.completed],
-        claimed: [...this.progression.claimed],
-      },
-      combat: this.combat.snapshot(this.elapsed),
       world: this.world.serialize(this.elapsed),
     };
   }
@@ -682,9 +584,6 @@ export class Game {
       data.world.generationVersion ?? WORLD_GEN_VERSION,
     );
     game.world.prune(game.elapsed);
-    game.camp = { level: Math.max(1, Math.min(3, data.camp?.level ?? 1)) };
-    game.progression = sanitizeProgression(data.progression);
-    game.combat = new CombatSystem(game.world.seed, data.combat);
     game.dead = game.player.health <= 0;
     game.pruneAt = game.elapsed + 1;
     game.wasNight = getDayInfo(game.elapsed).isNight;
