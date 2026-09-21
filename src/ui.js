@@ -1,5 +1,5 @@
-import { CHUNK_SIZE, ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
-import { MOTION_MODES, percentToVolume, volumeToPercent } from './settings.js';
+import { BIOMES, CHUNK_SIZE, ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
+import { MOTION_MODES, QUALITY_MODES, percentToVolume, volumeToPercent } from './settings.js';
 import { icon, fillIcons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -100,12 +100,15 @@ export class UI {
       $('settings-volume-value').textContent = `${volumeToPercent(level)}%`;
       setting('volume', level);
     });
-    for (const key of ['ambient', 'particles', 'debug'])
-      $(`settings-${key}`).addEventListener('change', (event) =>
+    for (const key of ['ambient', 'particles', 'debug', 'shake'])
+      $(`settings-${key}`)?.addEventListener('change', (event) =>
         setting(key, event.target.checked),
       );
     $('settings-motion').addEventListener('change', (event) =>
       setting('motion', event.target.value),
+    );
+    $('settings-quality')?.addEventListener('change', (event) =>
+      setting('quality', event.target.value),
     );
     $('settings-reset').addEventListener('click', () => resetSettings());
     document.querySelectorAll('dialog').forEach((dialog) => {
@@ -151,10 +154,15 @@ export class UI {
     $('settings-volume').value = String(volume);
     $('settings-volume-value').textContent = `${volume}%`;
     for (const key of ['ambient', 'particles']) $(`settings-${key}`).checked = settings[key];
+    if ($('settings-shake')) $('settings-shake').checked = settings.shake !== false;
     $('settings-debug').checked = debug;
     const motion = MOTION_MODES.includes(settings.motion) ? settings.motion : 'system';
     $('settings-motion').value = motion;
     $('settings-motion-note').textContent = MOTION_LABELS[motion];
+    if ($('settings-quality')) {
+      const quality = QUALITY_MODES.includes(settings.quality) ? settings.quality : 'auto';
+      $('settings-quality').value = quality;
+    }
     this.setDebugVisible(debug);
   }
   setDebugVisible(visible) {
@@ -231,12 +239,23 @@ export class UI {
     }
     $('day-label').textContent = `NGÀY ${String(day.day).padStart(2, '0')}`;
     $('clock-label').textContent = `${day.clock} · ${day.label}`;
-    const timeIcon = day.isNight ? 'moon' : 'sun';
+    const weather = game.weather ? game.weather() : null;
+    const weatherIcon =
+      weather?.type === 'rain' ? 'rain' : weather?.type === 'mist' ? 'mist' : null;
+    const timeIcon = weatherIcon ?? (day.isNight ? 'moon' : 'sun');
     if ($('time-icon').dataset.current !== timeIcon) {
       $('time-icon').innerHTML = icon(timeIcon, 22);
       $('time-icon').dataset.current = timeIcon;
     }
     $('coordinates').textContent = `${Math.round(p.x)}, ${Math.round(p.y)}`;
+    const locationName = $('location-name');
+    if (locationName) {
+      const biome = game.biome ? game.biome() : 'woodland';
+      const text = weather
+        ? `${BIOMES[biome]?.name ?? 'Rừng tĩnh lặng'} · ${weather.label}`
+        : (BIOMES[biome]?.name ?? 'Rừng tĩnh lặng');
+      if (locationName.textContent !== text) locationName.textContent = text;
+    }
     document.querySelectorAll('[data-count]').forEach((el) => {
       el.textContent = String(game.inventory[el.dataset.count]);
     });
@@ -299,6 +318,14 @@ export class UI {
         )
         .join('');
     }
+    const footer = $('journal-footer');
+    if (footer) {
+      const text =
+        game.stats.landmarks > 0
+          ? `Đã khám phá ${game.stats.landmarks} địa danh · Mỗi điều nhỏ bé, một khởi đầu.`
+          : 'Mỗi điều nhỏ bé, một khởi đầu.';
+      if (footer.textContent !== text) footer.textContent = text;
+    }
     if ($('inventory-dialog').open) this.renderInventory(game);
   }
   // The needle points at the marked home and the mini-map keeps the chunks
@@ -349,6 +376,27 @@ export class UI {
       if (column >= 0 && column < columns && row >= 0 && row < rows) {
         ctx.fillStyle = '#e0b96a';
         ctx.fillRect(column * cell + 2, row * cell + 2, cell - 5, cell - 5);
+      }
+    }
+    // Discovered landmarks appear; the undiscovered stay secret.
+    if (game.discovered?.size && game.world.generationVersion >= 2) {
+      try {
+        const landmarks = game.world.getLandmarks({
+          x: originX * CHUNK_SIZE,
+          y: originY * CHUNK_SIZE,
+          width: columns * CHUNK_SIZE,
+          height: rows * CHUNK_SIZE,
+        });
+        for (const landmark of landmarks) {
+          if (!game.discovered.has(landmark.id)) continue;
+          const column = Math.floor(landmark.x / CHUNK_SIZE) - originX,
+            row = Math.floor(landmark.y / CHUNK_SIZE) - originY;
+          if (column < 0 || column >= columns || row < 0 || row >= rows) continue;
+          ctx.fillStyle = '#9fd4e8';
+          ctx.fillRect(column * cell + 4, row * cell + 4, 4, 4);
+        }
+      } catch {
+        // The mini-map must never break the HUD.
       }
     }
     // The player dot keeps world precision inside their own chunk cell.
@@ -411,20 +459,32 @@ export class UI {
     $('item-detail').innerHTML =
       `<div class="detail-heading"><h3>${item.name}</h3><small>${item.kind}</small></div><p>${item.description}</p>`;
     const action = $('item-action');
-    action.hidden = !['berry', 'cooked', 'campfire', 'wall', 'chest', 'torch'].includes(
-      this.selectedItem,
-    );
+    action.hidden = ![
+      'berry',
+      'cooked',
+      'mushroom',
+      'salve',
+      'campfire',
+      'wall',
+      'chest',
+      'lantern',
+      'torch',
+    ].includes(this.selectedItem);
     action.disabled = !game.inventory[this.selectedItem];
     action.textContent =
       this.selectedItem === 'berry'
         ? 'Ăn một quả · +25 no'
         : this.selectedItem === 'cooked'
           ? 'Ăn quả nướng · +40 no'
-          : this.selectedItem === 'torch'
-            ? game.torchLit
-              ? 'Tắt đuốc'
-              : 'Thắp đuốc'
-            : 'Mang ra đặt';
+          : this.selectedItem === 'mushroom'
+            ? 'Ăn nấm · +15 no'
+            : this.selectedItem === 'salve'
+              ? 'Dùng cao dán · +35 máu'
+              : this.selectedItem === 'torch'
+                ? game.torchLit
+                  ? 'Tắt đuốc'
+                  : 'Thắp đuốc'
+                : 'Mang ra đặt';
     this.renderChest(game);
     const stash = $('stash-selected');
     if (stash) stash.hidden = !game.openChest;

@@ -292,3 +292,162 @@ test('a full inventory refuses the harvest and warns the player', () => {
   assert.ok(events.some((event) => event.type === 'message'));
   assert.equal(game.world.changes.size, 0);
 });
+
+const nearGuarantee = (game, x, y) => {
+  Object.assign(game.player, { x, y: y + 25 });
+  game.drainEvents();
+};
+
+test('mushrooms and herbs gather near home; herbs also yield fiber', () => {
+  const game = new Game(404);
+  nearGuarantee(game, 260, -180);
+  assert.equal(game.getFocus()?.entity.type, 'mushroom');
+  assert.equal(harvest(game), true);
+  assert.equal(game.inventory.mushroom, 1);
+  assert.equal(game.stats.mushrooms, 1);
+  nearGuarantee(game, -260, 220);
+  assert.equal(game.getFocus()?.entity.type, 'herb');
+  assert.equal(harvest(game), true);
+  assert.equal(game.inventory.herb, 1);
+  assert.equal(game.inventory.fiber, 1);
+  assert.equal(game.stats.herbs, 1);
+});
+
+test('crystals require a pickaxe and regrow slowly', () => {
+  const game = new Game(404);
+  const crystal = game.world
+    .getEntities({ x: -3000, y: -3000, width: 6000, height: 6000 }, 0)
+    .find((e) => e.type === 'crystal' && e.remaining > 0);
+  assert.ok(crystal, 'seed 404 should grow at least one crystal');
+  Object.assign(game.player, { x: crystal.x, y: crystal.y + 20 });
+  assert.equal(harvest(game), false);
+  game.inventory.pickaxe = 1;
+  assert.equal(harvest(game), true);
+  assert.equal(game.inventory.crystal, 1);
+  assert.equal(game.stats.crystals, 1);
+  const state = game.world.getState(crystal, game.elapsed);
+  assert.equal(state.remaining, 1);
+  assert.equal(state.respawnAt, game.elapsed + 300);
+});
+
+test('mushrooms feed a little and salves heal a lot, never above the maximum', () => {
+  const game = new Game(1);
+  Object.assign(game.player, { hunger: 40, health: 40 });
+  Object.assign(game.inventory, { mushroom: 2, salve: 1 });
+  assert.equal(game.eat('mushroom'), true);
+  assert.equal(game.inventory.mushroom, 1);
+  assert.equal(game.player.hunger, 55);
+  assert.equal(game.player.health, 42);
+  assert.equal(game.eat('salve'), true);
+  assert.equal(game.inventory.salve, 0);
+  assert.equal(game.player.health, 77);
+  Object.assign(game.player, { health: 90 });
+  game.inventory.salve = 1;
+  assert.equal(game.eat('salve'), true);
+  assert.equal(game.player.health, 100);
+});
+
+test('a healthy player cannot waste a salve', () => {
+  const game = new Game(1);
+  game.inventory.salve = 1;
+  assert.equal(game.eat('salve'), false);
+  assert.equal(game.inventory.salve, 1);
+});
+
+test('salve and lantern recipes consume their exact costs', () => {
+  const game = new Game(1);
+  Object.assign(game.inventory, { mushroom: 2, herb: 1, wood: 4, fiber: 2, crystal: 1 });
+  assert.equal(game.canCraft('salve'), true);
+  assert.equal(game.craft('salve'), true);
+  assert.equal(game.inventory.salve, 1);
+  assert.equal(game.inventory.mushroom, 0);
+  assert.equal(game.inventory.herb, 0);
+  assert.equal(game.canCraft('salve'), false);
+  assert.equal(game.craft('lantern'), true);
+  assert.equal(game.inventory.lantern, 1);
+  assert.equal(game.inventory.wood, 0);
+  assert.equal(game.inventory.crystal, 0);
+});
+
+test('a lantern is placed like other structures and recorded in the save', () => {
+  const game = new Game(404);
+  Object.assign(game.player, { x: 0, y: 0, direction: 'left' });
+  game.inventory.lantern = 1;
+  assert.equal(game.beginPlacement('lantern'), true);
+  const point = game.placementPoint();
+  assert.deepEqual(point, { x: -64, y: 0 });
+  assert.equal(game.place(point.x, point.y), true);
+  assert.equal(game.inventory.lantern, 0);
+  assert.deepEqual(game.world.structures, [{ id: 'built:0', type: 'lantern', x: -64, y: 0 }]);
+  assert.deepEqual(game.snapshot().world.structures, game.world.structures);
+});
+
+test('structures cannot be raised on top of a landmark', () => {
+  const game = new Game(7);
+  const [landmark] = game.world.getLandmarks({ x: -2000, y: -2000, width: 4000, height: 4000 });
+  assert.ok(landmark);
+  Object.assign(game.player, { x: landmark.x + 120, y: landmark.y });
+  game.inventory.wall = 1;
+  assert.equal(game.beginPlacement('wall'), true);
+  assert.equal(game.canPlace(landmark.x, landmark.y), false);
+  assert.equal(game.place(landmark.x, landmark.y), false);
+  assert.equal(game.inventory.wall, 1);
+});
+
+test('discovering a landmark rewards once and survives a save round-trip', () => {
+  const game = new Game(7);
+  const landmarks = game.world.getLandmarks({ x: -2000, y: -2000, width: 4000, height: 4000 });
+  landmarks.sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
+  Object.assign(game.player, { x: landmarks[0].x + 100, y: landmarks[0].y });
+  game.update(0.05, { x: 0, y: 0 });
+  const events = game.drainEvents();
+  assert.equal(game.discovered.size, 1);
+  assert.equal(game.stats.landmarks, 1);
+  assert.ok(events.some((event) => event.type === 'discovery'));
+  const berries = game.inventory.berry;
+  tick(game, 2);
+  game.drainEvents();
+  assert.equal(game.discovered.size, 1);
+  assert.equal(game.inventory.berry, berries);
+  const restored = Game.restore(game.snapshot());
+  assert.equal(restored.discovered.size, 1);
+  assert.equal(restored.stats.landmarks, 1);
+  restored.update(0.05, { x: 0, y: 0 });
+  assert.ok(!restored.drainEvents().some((event) => event.type === 'discovery'));
+});
+
+test('the journal tracks eleven goals, including forage, brew and discovery', () => {
+  const game = new Game(7);
+  assert.equal(game.goals().length, 11);
+  assert.ok(game.goals().every((goal) => !goal.done));
+  game.stats.mushrooms = 1;
+  assert.ok(game.goals().find((goal) => goal.label.includes('nấm')).done);
+  game.inventory.salve = 1;
+  assert.ok(game.goals().find((goal) => goal.label.includes('cao dán')).done);
+  game.stats.landmarks = 1;
+  assert.ok(game.goals().find((goal) => goal.label.includes('địa danh')).done);
+});
+
+test('each dusk-to-night crossing counts exactly one survived night', () => {
+  const game = new Game(1);
+  game.elapsed = 430;
+  game.update(0.05, { x: 0, y: 0 });
+  assert.equal(game.stats.nights, 0);
+  game.elapsed = 433;
+  game.update(0.05, { x: 0, y: 0 });
+  assert.equal(game.stats.nights, 1);
+  game.update(0.05, { x: 0, y: 0 });
+  assert.equal(game.stats.nights, 1);
+});
+
+test('biome and weather readings follow the seed, not the frame rate', () => {
+  const a = new Game(42),
+    b = new Game(42);
+  Object.assign(a.player, { x: 1500, y: -800 });
+  Object.assign(b.player, { x: 1500, y: -800 });
+  a.elapsed = 500;
+  b.elapsed = 500;
+  assert.equal(a.biome(), b.biome());
+  assert.deepEqual(a.weather(), b.weather());
+  assert.ok(['clear', 'cloud', 'mist', 'rain'].includes(a.weather().type));
+});

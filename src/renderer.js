@@ -1,5 +1,14 @@
-import { CHUNK_SIZE, RESOURCES, getDayInfo, clamp } from './config.js';
+import { BIOMES, CHUNK_SIZE, RESOURCES, clamp, getDayInfo, getWeather } from './config.js';
 import { DEFAULT_SETTINGS } from './settings.js';
+import {
+  drawCrystalCluster,
+  drawFire,
+  drawHerbPlant,
+  drawLanternPost,
+  drawLandmark,
+  drawMushroomCluster,
+  drawTreeOverlay,
+} from './art.js';
 
 const ASSETS = {
   grass: 'assets/environment/grass.png',
@@ -30,9 +39,40 @@ const PARTICLES = {
     count: 9,
   },
   deny: { colors: ['#dd9a86', '#c47a66'], gravity: 44, spread: 28, life: 0.55, count: 5 },
+  ember: {
+    colors: ['#f2a35a', '#e87a3d', '#ffd98a'],
+    gravity: -32,
+    spread: 22,
+    life: 1.1,
+    count: 8,
+  },
+  glow: {
+    colors: ['#cfe8f5', '#9fd4e8', '#fff6d8'],
+    gravity: -8,
+    spread: 44,
+    life: 1.2,
+    count: 12,
+  },
+  heal: {
+    colors: ['#a8d8a0', '#7fb069', '#e9f2c8'],
+    gravity: -20,
+    spread: 30,
+    life: 1,
+    count: 8,
+  },
+  petal: {
+    colors: ['#e8e4f0', '#f2c9d4', '#f5e3a8'],
+    gravity: 18,
+    spread: 36,
+    life: 1.1,
+    count: 6,
+  },
 };
-const MAX_PARTICLES = 120;
-const MAX_VISIBLE_LIGHTS = 6;
+const MAX_PARTICLES_HIGH = 180;
+const MAX_PARTICLES_MEDIUM = 120;
+const MAX_PARTICLES_LOW = 60;
+const MAX_VISIBLE_LIGHTS_HIGH = 8;
+const MAX_VISIBLE_LIGHTS_LOW = 4;
 function loadImage(src) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -60,6 +100,8 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.camera = { x: 0, y: 0 };
+    this.cameraInit = false;
+    this.trauma = 0;
     this.width = 0;
     this.height = 0;
     this.zoom = 1;
@@ -88,9 +130,30 @@ export class Renderer {
   get motionEffects() {
     return !this.reducedMotion;
   }
+  get quality() {
+    const q = this.settings.quality ?? 'auto';
+    if (q !== 'auto') return q;
+    // Auto: small screens get the light path, desktops get the full look.
+    if (typeof this.width === 'number' && this.width < 700) return 'low';
+    return 'medium';
+  }
+  get particleCap() {
+    const q = this.quality;
+    if (q === 'low') return MAX_PARTICLES_LOW;
+    if (q === 'high') return MAX_PARTICLES_HIGH;
+    return MAX_PARTICLES_MEDIUM;
+  }
+  get maxLights() {
+    return this.quality === 'low' ? MAX_VISIBLE_LIGHTS_LOW : MAX_VISIBLE_LIGHTS_HIGH;
+  }
   applySettings(settings) {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     if (!this.settings.particles) this.particles.length = 0;
+    while (this.particles.length > this.particleCap) this.particles.shift();
+  }
+  addShake(amount = 0.2) {
+    if (!this.settings.shake || this.reducedMotion) return;
+    this.trauma = clamp(this.trauma + amount, 0, 1);
   }
   async load() {
     await Promise.all(
@@ -161,10 +224,11 @@ export class Renderer {
     const rect = this.canvas.getBoundingClientRect();
     this.width = Math.max(1, rect.width);
     this.height = Math.max(1, rect.height);
+    const budget = this.quality === 'low' ? 4_000_000 : 8_000_000;
     this.dpr = Math.min(
       window.devicePixelRatio || 1,
       2,
-      Math.sqrt(8_000_000 / (this.width * this.height)),
+      Math.sqrt(budget / (this.width * this.height)),
     );
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
@@ -190,7 +254,10 @@ export class Renderer {
     const style = PARTICLES[kind];
     if (!style || !this.motionEffects || !this.settings.particles) return;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const count = Math.min(style.count, MAX_PARTICLES - this.particles.length);
+    const cap = this.particleCap;
+    // Decorative bursts yield to gameplay feedback when the pool is full.
+    if (this.particles.length >= cap && (kind === 'petal' || kind === 'leaf')) return;
+    const count = Math.min(style.count, cap - this.particles.length);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2,
         speed = style.spread * (0.35 + Math.random() * 0.65);
@@ -202,7 +269,10 @@ export class Renderer {
         vy: Math.sin(angle) * speed * 0.6 - (style.gravity < 0 ? 30 : 0),
         age: 0,
         life: style.life * (0.7 + Math.random() * 0.5),
-        size: kind === 'spark' ? 1.6 + Math.random() * 1.4 : 1.8 + Math.random() * 1.2,
+        size:
+          kind === 'spark' || kind === 'ember'
+            ? 1.6 + Math.random() * 1.4
+            : 1.8 + Math.random() * 1.2,
         color: style.colors[i % style.colors.length],
       });
     }
@@ -224,6 +294,8 @@ export class Renderer {
   reset() {
     this.effects.length = 0;
     this.particles.length = 0;
+    this.cameraInit = false;
+    this.trauma = 0;
   }
   render(game, { menu = false, target = null, placement = null, time = performance.now() } = {}) {
     const ctx = this.ctx,
@@ -235,20 +307,41 @@ export class Renderer {
         ? 1.5
         : 1.7
       : clamp(Math.min(this.width / 1000, this.height / 730), 1.1, 1.5);
-    this.camera.x = p.x - (this.width * (menu ? 0.71 : 0.5)) / this.zoom;
-    this.camera.y = p.y - (this.height * (menu ? 0.53 : 0.52)) / this.zoom;
+    // Smooth follow with a subtle look-ahead so movement feels alive but never laggy.
+    const lookAhead = p.moving && !this.reducedMotion ? 26 : 0;
+    const lookX = p.direction === 'right' ? lookAhead : p.direction === 'left' ? -lookAhead : 0;
+    const lookY = p.direction === 'down' ? lookAhead : p.direction === 'up' ? -lookAhead : 0;
+    const targetX = p.x + lookX - (this.width * (menu ? 0.71 : 0.5)) / this.zoom;
+    const targetY = p.y + lookY - (this.height * (menu ? 0.53 : 0.52)) / this.zoom;
+    if (!this.cameraInit || menu) {
+      this.camera.x = targetX;
+      this.camera.y = targetY;
+      this.cameraInit = true;
+    } else {
+      const ease = Math.min(1, dt * 7);
+      this.camera.x += (targetX - this.camera.x) * ease;
+      this.camera.y += (targetY - this.camera.y) * ease;
+    }
+    this.trauma = Math.max(0, this.trauma - dt * 2.2);
+    const shake = this.trauma * this.trauma * (this.reducedMotion ? 0 : 9);
+    const shakeX = shake ? Math.sin(time / 31) * shake : 0;
+    const shakeY = shake ? Math.cos(time / 43) * shake : 0;
+    const camX = this.camera.x + shakeX,
+      camY = this.camera.y + shakeY;
     const bounds = {
-      ...this.camera,
+      x: camX,
+      y: camY,
       width: this.width / this.zoom,
       height: this.height / this.zoom,
     };
     const world = game.world.getEntities(bounds, game.elapsed);
+    const landmarks = game.world.generationVersion >= 2 ? game.world.getLandmarks(bounds) : [];
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#435b3d';
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
-    ctx.translate(-this.camera.x, -this.camera.y);
+    ctx.translate(-camX, -camY);
     ctx.fillStyle = this.ground || '#435b3d';
     ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
     this.drawGround(game, bounds);
@@ -261,6 +354,7 @@ export class Renderer {
     }
     const objects = [
       ...world,
+      ...landmarks.map((l) => ({ ...l, remaining: 1 })),
       ...game.world.structures.filter(
         (s) =>
           s.x > bounds.x - 100 &&
@@ -272,14 +366,18 @@ export class Renderer {
     ];
     objects.sort((a, b) => a.y - b.y);
     for (const obj of objects) {
-      if (obj.type === 'player') this.drawPlayer(p, game.torchLit, time);
-      else this.drawEntity(obj, time, p);
+      try {
+        if (obj.type === 'player') this.drawPlayer(p, game.torchLit, time);
+        else this.drawEntity(obj, time, p, game);
+      } catch {
+        // One broken decoration must never kill the whole frame.
+      }
     }
     if (game.placement && placement && !menu) {
       const valid = game.canPlace(placement.x, placement.y);
       ctx.save();
       ctx.globalAlpha = 0.65;
-      this.drawEntity({ ...placement, type: game.placement }, time, p);
+      this.drawEntity({ ...placement, type: game.placement }, time, p, game);
       ctx.fillStyle = valid ? '#bddd7738' : '#db8b7038';
       ctx.strokeStyle = valid ? '#ccdfa0' : '#e2a18b';
       ctx.lineWidth = 1.5;
@@ -291,49 +389,78 @@ export class Renderer {
     }
     ctx.restore();
     this.drawGrading(game, menu);
+    if (!menu && getDayInfo(game.elapsed).nightFactor > 0.45) this.drawStars(game, time);
     this.drawLight(game, menu, time);
+    this.drawWeather(game, time, menu);
     if (this.motionEffects) this.drawAtmosphere(game, time, menu);
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
-    ctx.translate(-this.camera.x, -this.camera.y);
+    ctx.translate(-camX, -camY);
     this.drawParticles();
     this.drawEffects(time);
     ctx.restore();
     this.updateParticles(dt);
-    this.stats.entities = world.length;
+    this.stats.entities = world.length + landmarks.length;
     this.stats.structures = game.world.structures.length;
   }
   // A light hand on colour: warm when the sun is low, cool and dim at night.
   drawGrading(game, menu) {
     const ctx = this.ctx,
       day = getDayInfo(game.elapsed);
-    const warmth = menu
-      ? 0.25
-      : Math.min(
-          1,
-          Math.exp(-((day.phase - 0.05) ** 2) / 0.0016) * 0.85 +
-            Math.exp(-((day.phase - 0.47) ** 2) / 0.0018),
-        );
-    const night = menu ? 0 : 0.55 * (1 - day.daylight) * (1 - warmth);
+    const weather = game.weather ? game.weather() : getWeather(game.elapsed, game.world.seed);
+    const warmth = menu ? 0.25 : day.warmth;
+    const night = menu ? 0 : day.nightFactor * (1 - warmth * 0.55);
     if (warmth > 0.03) {
       ctx.fillStyle = `rgba(228, 152, 82, ${(0.13 * warmth).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+    if (!menu && day.dusk > 0.03) {
+      ctx.fillStyle = `rgba(120, 80, 140, ${(0.09 * day.dusk).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+    if (!menu && day.dawn > 0.03) {
+      ctx.fillStyle = `rgba(240, 180, 170, ${(0.07 * Math.min(1, day.dawn)).toFixed(4)})`;
       ctx.fillRect(0, 0, this.width, this.height);
     }
     if (night > 0.03) {
       ctx.fillStyle = `rgba(43, 66, 104, ${(0.14 * night).toFixed(4)})`;
       ctx.fillRect(0, 0, this.width, this.height);
     }
+    if (!menu && (weather.type === 'cloud' || weather.type === 'rain')) {
+      ctx.fillStyle = `rgba(60, 75, 90, ${(0.1 * weather.intensity).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+  }
+  drawStars(game, time) {
+    if (this.quality === 'low') return;
+    const ctx = this.ctx;
+    const day = getDayInfo(game.elapsed);
+    const alpha = clamp((day.nightFactor - 0.45) * 1.6, 0, 0.85);
+    if (alpha <= 0.02) return;
+    ctx.save();
+    for (let i = 0; i < 70; i++) {
+      const sx = (i * 173.3 + 41) % this.width;
+      const sy = (i * 97.7 + 13) % (this.height * 0.7);
+      const twinkle = 0.5 + 0.5 * Math.sin(time / (500 + (i % 5) * 160) + i * 1.7);
+      ctx.globalAlpha = alpha * (0.35 + twinkle * 0.65);
+      ctx.fillStyle = i % 9 === 0 ? '#cfe0ff' : '#e8ecff';
+      const s = i % 11 === 0 ? 2 : 1;
+      ctx.fillRect(sx, sy, s, s);
+    }
+    ctx.restore();
   }
   // Decoration variants are bucketed once per chunk, so a frame only changes
   // drawing state a handful of times per chunk instead of once per tuft.
   decorationBuckets(chunk) {
     let buckets = this.decorationCache.get(chunk);
     if (!buckets) {
-      buckets = { shade: [], blades: [], stones: [] };
+      buckets = { shade: [], blades: [], stones: [], flowers: [] };
       for (const decoration of chunk.decorations) {
         if (decoration.variant < 0.16) buckets.shade.push(decoration);
         else if (decoration.variant < 0.55) buckets.blades.push(decoration);
         else if (decoration.variant > 0.86) buckets.stones.push(decoration);
+        if (decoration.flower !== undefined && decoration.flower > 0.8)
+          buckets.flowers.push(decoration);
       }
       this.decorationCache.set(chunk, buckets);
     }
@@ -341,6 +468,29 @@ export class Renderer {
   }
   drawGround(game, bounds) {
     const ctx = this.ctx;
+    const v2 = game.world.generationVersion >= 2;
+    if (v2) {
+      // Per-chunk biome wash keeps transitions soft without per-pixel cost.
+      for (
+        let cy = Math.floor(bounds.y / CHUNK_SIZE);
+        cy <= Math.floor((bounds.y + bounds.height) / CHUNK_SIZE);
+        cy++
+      ) {
+        for (
+          let cx = Math.floor(bounds.x / CHUNK_SIZE);
+          cx <= Math.floor((bounds.x + bounds.width) / CHUNK_SIZE);
+          cx++
+        ) {
+          const biome = game.world.biomeAt(
+            cx * CHUNK_SIZE + CHUNK_SIZE / 2,
+            cy * CHUNK_SIZE + CHUNK_SIZE / 2,
+          );
+          const color = BIOMES[biome]?.ground ?? '#4c6240';
+          ctx.fillStyle = color + '55';
+          ctx.fillRect(cx * CHUNK_SIZE, cy * CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE);
+        }
+      }
+    }
     // A soft clearing is anchored to the world rather than moving with the camera.
     const clearing = ctx.createRadialGradient(0, 0, 20, 0, 0, 185);
     clearing.addColorStop(0, '#8e8b5544');
@@ -383,7 +533,12 @@ export class Renderer {
           ctx.fillRect(Math.round(d.x) - 8, Math.round(d.y) - 4, 4, 2);
           ctx.fillRect(Math.round(d.x) + 6, Math.round(d.y) + 3, 3, 2);
         }
-        ctx.strokeStyle = '#88a96e66';
+        const biomeGrass = v2
+          ? (BIOMES[
+              game.world.biomeAt(cx * CHUNK_SIZE + CHUNK_SIZE / 2, cy * CHUNK_SIZE + CHUNK_SIZE / 2)
+            ]?.grass ?? '#88a96e')
+          : '#88a96e';
+        ctx.strokeStyle = biomeGrass + '66';
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (const d of buckets.blades) {
@@ -398,6 +553,17 @@ export class Renderer {
           ctx.lineTo(x + 6, y - 4);
         }
         ctx.stroke();
+        if (buckets.flowers.length && v2) {
+          for (const d of buckets.flowers) {
+            if (!visible(d)) continue;
+            const x = Math.round(d.x),
+              y = Math.round(d.y);
+            ctx.fillStyle = d.flower > 0.93 ? '#f2c9d4' : d.flower > 0.87 ? '#f5e3a8' : '#e8e4f0';
+            ctx.fillRect(x - 1, y - 8, 3, 3);
+            ctx.fillStyle = '#4d6b45';
+            ctx.fillRect(x, y - 5, 1, 6);
+          }
+        }
         for (const d of buckets.stones) {
           if (!visible(d)) continue;
           const x = Math.round(d.x),
@@ -418,7 +584,7 @@ export class Renderer {
     ctx.ellipse(x + 3, y + 3, width, height, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  drawEntity(entity, time, player) {
+  drawEntity(entity, time, player, game) {
     const ctx = this.ctx,
       { x, y, type } = entity;
     if (type === 'tree') {
@@ -460,6 +626,7 @@ export class Renderer {
         ctx.ellipse(x, y - 62, 28, 57, 0, 0, Math.PI * 2);
         ctx.fill();
       }
+      drawTreeOverlay(ctx, x, y, width, height, variation, entity.biome ?? 'woodland');
       ctx.restore();
     } else if (type === 'bush') {
       this.shadow(x, y, 23, 8);
@@ -552,6 +719,19 @@ export class Renderer {
       ctx.fillRect(7, 4, 12, 5);
       ctx.fillRect(12, 1, 10, 4);
       ctx.restore();
+    } else if (type === 'mushroom') {
+      drawMushroomCluster(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 2, time);
+    } else if (type === 'herb') {
+      drawHerbPlant(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 2, time);
+    } else if (type === 'crystal') {
+      if (entity.remaining === 0) {
+        ctx.fillStyle = '#4a524866';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 12, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+      drawCrystalCluster(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 2, time);
     } else if (type === 'campfire') {
       this.shadow(x, y, 27, 10);
       ctx.fillStyle = '#716c53';
@@ -581,26 +761,9 @@ export class Renderer {
       ctx.rotate(-0.6);
       ctx.fillRect(-18, -5, 36, 7);
       ctx.restore();
-      const flicker = this.reducedMotion ? 0 : Math.sin(time / 110) * 3;
-      ctx.fillStyle = '#c58945';
-      ctx.beginPath();
-      ctx.moveTo(x - 13, y - 3);
-      ctx.quadraticCurveTo(x - 17, y - 13, x - 5, y - 26 - flicker);
-      ctx.quadraticCurveTo(x - 4, y - 15, x + 2, y - 34 + flicker);
-      ctx.quadraticCurveTo(x + 6, y - 20, x + 12, y - 13);
-      ctx.quadraticCurveTo(x + 16, y + 3, x - 13, y - 3);
-      ctx.fill();
-      ctx.fillStyle = '#edc575';
-      ctx.beginPath();
-      ctx.moveTo(x - 7, y);
-      ctx.quadraticCurveTo(x - 11, y - 9, x, y - 21);
-      ctx.quadraticCurveTo(x, y - 8, x + 6, y - 10);
-      ctx.quadraticCurveTo(x + 12, y + 2, x - 7, y);
-      ctx.fill();
-      ctx.fillStyle = '#fff0b1';
-      ctx.beginPath();
-      ctx.ellipse(x, y - 3, 4, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
+      drawFire(ctx, x, y, 1, time, this.reducedMotion);
+    } else if (type === 'lantern') {
+      drawLanternPost(ctx, x, y, time, true);
     } else if (type === 'chest') {
       this.shadow(x, y, 22, 9);
       ctx.fillStyle = '#5c4a32';
@@ -625,6 +788,24 @@ export class Renderer {
         ctx.fillRect(x + dx - 4, y - 33, 3, 40);
         ctx.fillStyle = '#48523b';
         ctx.fillRect(x + dx - 1, y - 23, 2, 2);
+      }
+    } else if (
+      type === 'stoneCircle' ||
+      type === 'oldCamp' ||
+      type === 'shrine' ||
+      type === 'ancientTree' ||
+      type === 'pond' ||
+      type === 'giantRock'
+    ) {
+      const night = game ? getDayInfo(game.elapsed).isNight : false;
+      if (type === 'ancientTree' && player) {
+        ctx.save();
+        if (player.y < y - 4 && player.y > y - 200 && Math.abs(player.x - x) < 60)
+          ctx.globalAlpha = 0.5;
+        drawLandmark(ctx, type, x, y, entity.variant ?? 0.5, time, night);
+        ctx.restore();
+      } else {
+        drawLandmark(ctx, type, x, y, entity.variant ?? 0.5, time, night);
       }
     }
   }
@@ -668,7 +849,11 @@ export class Renderer {
   drawLight(game, menu, time) {
     const ctx = this.ctx;
     const day = getDayInfo(game.elapsed);
-    const darkness = menu ? 0.06 : 0.68 * (1 - day.daylight);
+    const weather = game.weather ? game.weather() : getWeather(game.elapsed, game.world.seed);
+    let darkness = menu ? 0.06 : 0.68 * day.nightFactor;
+    if (!menu && (weather.type === 'cloud' || weather.type === 'rain'))
+      darkness = Math.min(0.72, darkness + 0.12 * weather.intensity);
+    if (!menu && weather.type === 'mist') darkness = Math.min(0.72, darkness + 0.06);
     if (darkness < 0.02) {
       this.stats.lights = 0;
       return;
@@ -679,6 +864,50 @@ export class Renderer {
     light.globalCompositeOperation = 'source-over';
     light.fillStyle = `rgba(9, 23, 35, ${darkness})`;
     light.fillRect(0, 0, this.width, this.height);
+    const view = {
+      x: this.camera.x - 260,
+      y: this.camera.y - 260,
+      width: this.width / this.zoom + 520,
+      height: this.height / this.zoom + 520,
+    };
+    const inView = (s) =>
+      s.x > view.x && s.x < view.x + view.width && s.y > view.y && s.y < view.y + view.height;
+    const fires = game.world.structures
+      .filter((s) => s.type === 'campfire' && inView(s))
+      .map((s) => ({
+        x: s.x,
+        y: s.y,
+        radius: 200,
+        strength: 1,
+        distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+      }));
+    const lanterns = game.world.structures
+      .filter((s) => s.type === 'lantern' && inView(s))
+      .map((s) => ({
+        x: s.x,
+        y: s.y - 38,
+        radius: 175,
+        strength: 0.95,
+        distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+      }));
+    const shrines =
+      game.world.generationVersion >= 2
+        ? game.world
+            .getLandmarks({
+              x: this.camera.x - 200,
+              y: this.camera.y - 200,
+              width: this.width / this.zoom + 400,
+              height: this.height / this.zoom + 400,
+            })
+            .filter((l) => l.type === 'shrine')
+            .map((s) => ({
+              x: s.x,
+              y: s.y - 16,
+              radius: 110,
+              strength: 0.7,
+              distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+            }))
+        : [];
     // Only the closest fires are drawn: uncapped gradients cost more than they
     // can add on a screen that cannot show them all anyway.
     const lights = [
@@ -688,23 +917,9 @@ export class Renderer {
         radius: game.torchLit ? 190 : 60,
         strength: game.torchLit ? 1 : 0.6,
       },
-      ...game.world.structures
-        .filter(
-          (s) =>
-            s.type === 'campfire' &&
-            s.x > this.camera.x - 260 &&
-            s.x < this.camera.x + this.width / this.zoom + 260 &&
-            s.y > this.camera.y - 260 &&
-            s.y < this.camera.y + this.height / this.zoom + 260,
-        )
-        .map((s) => ({
-          ...s,
-          radius: 200,
-          strength: 1,
-          distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
-        }))
+      ...[...fires, ...lanterns, ...shrines]
         .sort((a, b) => a.distance - b.distance)
-        .slice(0, MAX_VISIBLE_LIGHTS)
+        .slice(0, this.maxLights)
         .map(({ x, y, radius, strength }) => ({ x, y, radius, strength })),
     ];
     this.stats.lights = lights.length;
@@ -723,10 +938,71 @@ export class Renderer {
     light.globalCompositeOperation = 'source-over';
     ctx.drawImage(this.light, 0, 0, this.width, this.height);
   }
+  drawWeather(game, time, menu) {
+    if (menu || this.quality === 'low') {
+      if (menu) return;
+      // Low quality still shows a hint of rain so weather stays readable.
+      const weather = game.weather ? game.weather() : getWeather(game.elapsed, game.world.seed);
+      if (weather.type !== 'rain' || weather.intensity < 0.1) return;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.strokeStyle = `rgba(170,200,220,${0.25 * weather.intensity})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 24; i++) {
+        const x = (i * 97.3 + time / 22) % (this.width + 40);
+        const y = (i * 211.7 + time / 14) % (this.height + 40);
+        ctx.moveTo(this.width - x, y - 20);
+        ctx.lineTo(this.width - x - 5, y - 8);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const ctx = this.ctx;
+    const weather = game.weather ? game.weather() : getWeather(game.elapsed, game.world.seed);
+    if (weather.type === 'rain' && weather.intensity > 0.05) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(170,200,220,${0.32 * weather.intensity})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const drops = this.quality === 'high' ? 110 : 70;
+      for (let i = 0; i < drops; i++) {
+        const x = (i * 97.3 + time / 20 + Math.sin(i * 3.1) * 30) % (this.width + 60);
+        const y = (i * 211.7 + time / 12) % (this.height + 60);
+        ctx.moveTo(this.width - x, y - 30);
+        ctx.lineTo(this.width - x - 6, y - 14);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (
+      (weather.type === 'mist' || weather.type === 'cloud') &&
+      weather.intensity > 0.05 &&
+      !menu
+    ) {
+      ctx.save();
+      const drift = this.reducedMotion ? 0 : Math.sin(time / 4200) * 60;
+      for (let i = 0; i < 3; i++) {
+        const gx = this.width * (0.25 + i * 0.25) + drift * (i % 2 ? 1 : -1);
+        const gy = this.height * (0.3 + (i % 2) * 0.3);
+        const radius = Math.max(this.width, this.height) * 0.42;
+        const fog = ctx.createRadialGradient(gx, gy, 10, gx, gy, radius);
+        const alpha = (weather.type === 'mist' ? 0.14 : 0.07) * weather.intensity;
+        fog.addColorStop(0, `rgba(200,215,205,${alpha})`);
+        fog.addColorStop(1, 'rgba(200,215,205,0)');
+        ctx.fillStyle = fog;
+        ctx.fillRect(0, 0, this.width, this.height);
+      }
+      ctx.restore();
+    }
+  }
   drawAtmosphere(game, time, menu) {
     const ctx = this.ctx,
-      night = getDayInfo(game.elapsed).isNight && !menu;
-    for (let i = 0; i < 17; i++) {
+      day = getDayInfo(game.elapsed),
+      night = day.isNight && !menu;
+    const count = this.quality === 'low' ? 9 : this.quality === 'high' ? 24 : 17;
+    for (let i = 0; i < count; i++) {
       const x =
         (((i * 137.7 + Math.sin(time / 5500 + i) * 38 - this.camera.x * 0.25) % this.width) +
           this.width) %
@@ -736,8 +1012,33 @@ export class Renderer {
           this.height) %
         this.height;
       const alpha = (Math.sin(time / 1400 + i) + 1) * (night ? 0.26 : 0.11);
-      ctx.fillStyle = `rgba(221,225,162,${alpha})`;
+      ctx.fillStyle = night ? `rgba(190,230,150,${alpha})` : `rgba(221,225,162,${alpha})`;
       ctx.fillRect(x, y, night ? 2 : 1.5, night ? 2 : 1.5);
+    }
+    // Dawn mist breathes low over the ground.
+    if (!menu && (day.dawn > 0.25 || day.phase < 0.12) && this.quality !== 'low') {
+      ctx.save();
+      const drift = this.reducedMotion ? 0 : Math.sin(time / 3600) * 40;
+      const haze = ctx.createLinearGradient(0, this.height * 0.45, 0, this.height);
+      haze.addColorStop(0, 'rgba(220,228,210,0)');
+      haze.addColorStop(1, `rgba(220,228,210,${0.1 * Math.min(1, day.dawn + 0.4)})`);
+      ctx.fillStyle = haze;
+      ctx.fillRect(drift * 0.2, 0, this.width, this.height);
+      ctx.restore();
+    }
+    // Light rays through the canopy at golden hours.
+    if (!menu && day.warmth > 0.4 && this.quality === 'high') {
+      ctx.save();
+      ctx.globalAlpha = 0.1 * day.warmth;
+      ctx.fillStyle = '#ffe9b8';
+      ctx.beginPath();
+      ctx.moveTo(this.width * 0.72, 0);
+      ctx.lineTo(this.width * 0.84, 0);
+      ctx.lineTo(this.width * 0.5, this.height);
+      ctx.lineTo(this.width * 0.34, this.height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
     if (menu) {
       const gradient = ctx.createLinearGradient(this.width * 0.9, 0, this.width * 0.5, this.height);

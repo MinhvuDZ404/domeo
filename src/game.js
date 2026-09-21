@@ -7,24 +7,31 @@ import {
   COOKED_HEALTH,
   COOKED_HUNGER,
   DAY_LENGTH,
+  DISCOVERY_RADIUS,
   FIRE_MIN_HUNGER,
   HUNGER_DRAIN_PER_SECOND,
   INTERACTION_DISTANCE,
   ITEMS,
+  LANDMARKS,
+  MAX_DISCOVERIES,
   MAX_EXPLORED,
   MAX_STACK,
   MAX_STRUCTURES,
+  MUSHROOM_HEALTH,
+  MUSHROOM_HUNGER,
   PLACEABLE,
   PLAYER_SPEED,
   RECIPES,
   RESOURCES,
+  SALVE_HEALTH,
   SAVE_VERSION,
   STARVATION_DAMAGE_PER_SECOND,
   WORLD_GEN_VERSION,
   WORLD_LIMIT,
-  clamp,
   emptyItems,
   emptyStats,
+  getDayInfo,
+  getWeather,
 } from './config.js';
 import { World } from './world.js';
 
@@ -55,17 +62,29 @@ export class Game {
     this.explored = new Set(['0,0']);
     this.stats.explored = 1;
     this.openChest = false;
+    this.discovered = new Set();
+    this.stepAcc = 0;
+    this.wasNight = getDayInfo(0).isNight;
+    this.discoverAt = 0;
   }
   emit(type, data = {}) {
+    if (this.events.length > 200) this.events.shift();
     this.events.push({ type, ...data });
   }
   drainEvents() {
     return this.events.splice(0);
   }
   addItem(item, count, bag = this.inventory) {
+    if (!(item in bag)) return 0;
     const added = Math.min(count, MAX_STACK - bag[item]);
     bag[item] += added;
     return added;
+  }
+  weather() {
+    return getWeather(this.elapsed, this.world.seed);
+  }
+  biome() {
+    return this.world.biomeAt(this.player.x, this.player.y);
   }
   nearCampfire(radius = CAMPFIRE_HEAL_RADIUS) {
     const p = this.player;
@@ -91,6 +110,43 @@ export class Game {
       dy = this.home.y - this.player.y;
     return { distance: Math.hypot(dx, dy), angle: Math.atan2(dx, -dy) };
   }
+  checkDiscoveries() {
+    if (this.world.generationVersion < 2) return;
+    // Landmarks don't move: checking a few times per second is plenty, and it
+    // keeps the world query budget flat on low-end devices.
+    if (this.elapsed < this.discoverAt) return;
+    this.discoverAt = this.elapsed + 0.3;
+    if (this.discovered.size >= MAX_DISCOVERIES) return;
+    const p = this.player;
+    const landmarks = this.world.getLandmarks({
+      x: p.x - DISCOVERY_RADIUS,
+      y: p.y - DISCOVERY_RADIUS,
+      width: DISCOVERY_RADIUS * 2,
+      height: DISCOVERY_RADIUS * 2,
+    });
+    for (const landmark of landmarks) {
+      if (this.discovered.has(landmark.id)) continue;
+      if (Math.hypot(landmark.x - p.x, landmark.y - p.y) > DISCOVERY_RADIUS) continue;
+      this.discovered.add(landmark.id);
+      this.stats.landmarks = this.discovered.size;
+      const info = LANDMARKS[landmark.type];
+      const rewards = [];
+      if (info?.reward) {
+        for (const [item, count] of Object.entries(info.reward)) {
+          const added = this.addItem(item, count);
+          if (added > 0) rewards.push(`+${added} ${ITEMS[item].name.toLowerCase()}`);
+        }
+      }
+      this.emit('discovery', {
+        x: landmark.x,
+        y: landmark.y,
+        landmark: landmark.type,
+        name: info?.name ?? 'Địa danh mới',
+        hint: info?.hint ?? '',
+        text: `Đã khám phá: ${info?.name ?? 'vùng đất mới'}${rewards.length ? ` · ${rewards.join(' · ')}` : ''}`,
+      });
+    }
+  }
   update(dt, movement = { x: 0, y: 0 }) {
     if (this.dead || !Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 0.05); // Returning to a hidden tab cannot starve or teleport the player.
@@ -102,6 +158,9 @@ export class Game {
     const byFire = !!this.nearCampfire();
     if (byFire && p.hunger > FIRE_MIN_HUNGER)
       p.health = Math.min(100, p.health + dt * CAMPFIRE_HEAL_PER_SECOND);
+    const night = getDayInfo(this.elapsed).isNight;
+    if (night && !this.wasNight) this.stats.nights += 1;
+    this.wasNight = night;
     if (p.health <= 0) {
       this.dead = true;
       this.placement = null;
@@ -129,10 +188,19 @@ export class Game {
       if (dy && this.world.canMove(p.x, p.y, p.x, y, this.elapsed)) p.y = y;
     }
     p.moving = p.x !== oldX || p.y !== oldY;
-    this.stats.distance += Math.hypot(p.x - oldX, p.y - oldY);
+    const moved = Math.hypot(p.x - oldX, p.y - oldY);
+    this.stats.distance += moved;
     p.animation = p.moving ? p.animation + dt : 0;
     p.frame = p.moving ? Math.floor(p.animation * 8) % 8 : 0;
+    if (p.moving) {
+      this.stepAcc += moved;
+      if (this.stepAcc > 64) {
+        this.stepAcc = 0;
+        this.emit('step', { x: p.x, y: p.y, surface: this.biome() });
+      }
+    } else this.stepAcc = 0;
     this.markExplored();
+    this.checkDiscoveries();
     if (this.openChest && !this.nearChest()) this.openChest = false;
     if (this.elapsed >= this.pruneAt) {
       this.world.prune(this.elapsed);
@@ -158,10 +226,12 @@ export class Game {
     return candidates[0] || null;
   }
   getFocus() {
-    const resource = this.getTarget();
-    if (resource) return { kind: 'resource', entity: resource };
+    // Important interactions win over distant decor: a chest at your feet beats
+    // a berry bush a few steps away.
     const chest = this.nearChest();
     if (chest) return { kind: 'chest', entity: chest };
+    const resource = this.getTarget();
+    if (resource) return { kind: 'resource', entity: resource };
     const fire = this.nearCampfire(INTERACTION_DISTANCE);
     if (fire) return { kind: 'campfire', entity: fire };
     return null;
@@ -197,8 +267,18 @@ export class Game {
         ? 'wood'
         : target.type === 'rock' || target.type === 'pebble'
           ? 'stone'
-          : 'berry';
-    const quantity = ['tree', 'rock'].includes(target.type) ? 5 : target.type === 'bush' ? 1 : 2;
+          : target.type === 'mushroom'
+            ? 'mushroom'
+            : target.type === 'herb'
+              ? 'herb'
+              : target.type === 'crystal'
+                ? 'crystal'
+                : 'berry';
+    const quantity = ['tree', 'rock'].includes(target.type)
+      ? 5
+      : ['bush', 'mushroom', 'herb', 'crystal'].includes(target.type)
+        ? 1
+        : 2;
     if (this.inventory[reward] + quantity > MAX_STACK) {
       this.emit('deny', { x: target.x, y: target.y });
       this.emit('message', { text: `${ITEMS[reward].name} đã đầy.`, tone: 'warning' });
@@ -206,43 +286,60 @@ export class Game {
     }
     const state = this.world.consume(target, this.elapsed);
     if (!state) return false;
-    let text = target.type === 'tree' ? 'Chặt cây' : 'Khai thác đá';
-    if (target.type === 'bush' || state.remaining === 0) {
+    let text =
+      target.type === 'tree' ? 'Chặt cây' : target.type === 'rock' ? 'Khai thác đá' : 'Thu thập';
+    if (['bush', 'mushroom', 'herb', 'crystal'].includes(target.type) || state.remaining === 0) {
       const added = this.addItem(reward, quantity);
       if (reward === 'berry') {
         this.stats.berries += added;
         this.addItem('fiber', 1);
-      } else this.stats[reward] += added;
+      } else if (reward === 'mushroom') this.stats.mushrooms += added;
+      else if (reward === 'herb') {
+        this.stats.herbs += added;
+        this.addItem('fiber', 1);
+      } else if (reward === 'crystal') this.stats.crystals += added;
+      else this.stats[reward] += added;
       text = `+${added} ${ITEMS[reward].name.toLowerCase()}`;
-      if (reward === 'berry') text += ' · +1 sợi';
+      if (reward === 'berry' || reward === 'herb') text += ' · +1 sợi';
     }
     this.emit('gather', { x: target.x, y: target.y, text, item: reward });
     return true;
   }
   eat(item = 'berry') {
     if (this.dead) return false;
-    const food =
-      item === 'cooked'
-        ? { hunger: COOKED_HUNGER, health: COOKED_HEALTH, id: 'cooked' }
-        : { hunger: BERRY_HUNGER, health: BERRY_HEALTH, id: 'berry' };
+    const foods = {
+      berry: { hunger: BERRY_HUNGER, health: BERRY_HEALTH, id: 'berry' },
+      cooked: { hunger: COOKED_HUNGER, health: COOKED_HEALTH, id: 'cooked' },
+      mushroom: { hunger: MUSHROOM_HUNGER, health: MUSHROOM_HEALTH, id: 'mushroom' },
+      salve: { hunger: 0, health: SALVE_HEALTH, id: 'salve' },
+    };
+    const food = foods[item] ?? foods.berry;
     if (!this.inventory[food.id]) {
-      this.emit('message', {
-        text:
-          food.id === 'cooked'
-            ? 'Chưa có quả nướng. Đứng gần lửa và nhấn E khi còn quả mọng.'
-            : 'Hết quả rồi. Tìm một bụi quả mọng nhé.',
-        tone: 'warning',
-      });
+      const hints = {
+        berry: 'Hết quả rồi. Tìm một bụi quả mọng nhé.',
+        cooked: 'Chưa có quả nướng. Đứng gần lửa và nhấn E khi còn quả mọng.',
+        mushroom: 'Chưa có nấm. Tìm nơi ẩm thấp trong rừng sâu hoặc rừng sương.',
+        salve: 'Chưa có cao dán. Chế từ 2 nấm và 1 thảo mộc.',
+      };
+      this.emit('message', { text: hints[food.id], tone: 'warning' });
       return false;
     }
-    if (this.player.hunger >= 100 && this.player.health >= 100) {
+    if (food.id === 'salve') {
+      if (this.player.health >= 100) {
+        this.emit('message', { text: 'Bạn đang khỏe. Để dành cao dán cho lúc cần nhé.' });
+        return false;
+      }
+    } else if (this.player.hunger >= 100 && this.player.health >= 100) {
       this.emit('message', { text: 'Bạn vẫn đang no. Để dành thức ăn cho lát nữa nhé.' });
       return false;
     }
     this.inventory[food.id]--;
     this.player.hunger = Math.min(100, this.player.hunger + food.hunger);
     this.player.health = Math.min(100, this.player.health + food.health);
-    this.emit('eat', { text: `+${food.hunger} no · +${food.health} máu` });
+    this.emit('eat', {
+      text:
+        food.id === 'salve' ? `+${food.health} máu` : `+${food.hunger} no · +${food.health} máu`,
+    });
     return true;
   }
   cook() {
@@ -351,9 +448,15 @@ export class Game {
       { x: x - 40, y: y - 40, width: 80, height: 80 },
       this.elapsed,
     );
-    return ![...nearby.filter((e) => e.remaining > 0), ...this.world.structures].some(
+    const blocked = [...nearby.filter((e) => e.remaining > 0), ...this.world.structures].some(
       (e) => Math.hypot(x - e.x, y - e.y) < (this.placement === 'wall' ? 48 : 42),
     );
+    if (blocked) return false;
+    if (this.world.generationVersion >= 2) {
+      const landmarks = this.world.landmarksNear(x, y, 95);
+      if (landmarks.length) return false;
+    }
+    return true;
   }
   place(x, y) {
     if (this.dead || !this.placement || !this.inventory[this.placement]) return false;
@@ -371,20 +474,20 @@ export class Game {
     if (type === 'campfire') this.stats.campfires++;
     if (type === 'chest') this.stats.chests++;
     this.placement = null;
-    this.emit('build', {
-      x,
-      y,
-      item: type,
-      text:
-        type === 'campfire'
-          ? 'Một đốm lửa. Một nơi để trở về.'
-          : type === 'chest'
-            ? 'Rương gỗ. Đồ quý được cất giữ.'
-            : 'Đã dựng hàng rào.',
-    });
+    const texts = {
+      campfire: 'Một đốm lửa. Một nơi để trở về.',
+      chest: 'Rương gỗ. Đồ quý được cất giữ.',
+      lantern: 'Đèn lồng tinh thể. Đêm bớt tối hơn.',
+      wall: 'Đã dựng hàng rào.',
+    };
+    this.emit('build', { x, y, item: type, text: texts[type] ?? 'Đã dựng công trình.' });
     return true;
   }
   goals() {
+    const hasLantern =
+      this.inventory.lantern > 0 ||
+      this.world.structures.some((s) => s.type === 'lantern') ||
+      this.inventory.salve > 0;
     return [
       {
         label: 'Hái quả mọng đầu tiên',
@@ -422,8 +525,23 @@ export class Game {
         done: !!this.home,
       },
       {
-        label: 'Sống qua một chu kỳ',
-        hint: 'Đừng quên ăn quả bằng phím F',
+        label: 'Tìm nấm, thảo mộc hoặc tinh thể',
+        hint: 'Đi xa hơn, để ý rừng sâu và đất đá',
+        done: this.stats.mushrooms + this.stats.herbs + this.stats.crystals > 0,
+      },
+      {
+        label: 'Chế cao dán hoặc đèn lồng',
+        hint: 'Mở Chế tạo khi đã có nguyên liệu mới',
+        done: hasLantern,
+      },
+      {
+        label: 'Khám phá một địa danh',
+        hint: 'Đi theo những dấu hiệu lạ trong rừng',
+        done: this.stats.landmarks > 0,
+      },
+      {
+        label: 'Sống qua một chu kỳ 24 phút',
+        hint: 'Ăn uống đầy đủ, giữ lửa khi đêm xuống',
         done: this.elapsed >= DAY_LENGTH,
       },
     ];
@@ -441,6 +559,7 @@ export class Game {
       home: this.home ? { ...this.home } : null,
       chest: { ...this.chest },
       explored: [...this.explored],
+      discovered: [...this.discovered],
       world: this.world.serialize(this.elapsed),
     };
   }
@@ -455,6 +574,9 @@ export class Game {
     game.chest = { ...emptyItems(), ...data.chest };
     game.explored = new Set(data.explored?.length ? data.explored : ['0,0']);
     game.stats.explored = game.explored.size;
+    game.discovered = new Set(Array.isArray(data.discovered) ? data.discovered : []);
+    game.discoverAt = 0;
+    game.stats.landmarks = game.discovered.size;
     game.world = new World(
       data.world.seed,
       data.world.changes,
@@ -464,6 +586,7 @@ export class Game {
     game.world.prune(game.elapsed);
     game.dead = game.player.health <= 0;
     game.pruneAt = game.elapsed + 1;
+    game.wasNight = getDayInfo(game.elapsed).isNight;
     return game;
   }
 }

@@ -1,6 +1,7 @@
 import {
   ITEMS,
   LOCK_KEY,
+  MAX_DISCOVERIES,
   MAX_EXPLORED,
   MAX_STACK,
   MAX_STRUCTURES,
@@ -9,7 +10,6 @@ import {
   SAVE_VERSION,
   STAT_KEYS,
   UNIQUE_ITEMS,
-  WORLD_GEN_VERSION,
   WORLD_LIMIT,
   emptyItems,
   emptyStats,
@@ -30,22 +30,43 @@ function validInventory(bag) {
 export function migrateSave(data) {
   if (!object(data) || !integer(data.version, 1, SAVE_VERSION)) return null;
   if (data.version === SAVE_VERSION) return data;
-  if (data.version === 1) {
-    return {
-      ...data,
+  let current = data;
+  // v1 (Domeo 2.0/3.0): no cooked/chest/home/explored/discovered, old world gen.
+  if (current.version === 1) {
+    current = {
+      ...current,
       version: 2,
-      inventory: { ...emptyItems(), ...data.inventory },
-      stats: { ...emptyStats(), ...data.stats },
+      inventory: { ...emptyItems(), ...current.inventory },
+      stats: { ...emptyStats(), ...current.stats },
       home: null,
       chest: emptyItems(),
       explored: [],
+      discovered: [],
       world: {
-        ...data.world,
-        generationVersion: WORLD_GEN_VERSION,
+        ...current.world,
+        generationVersion: 1,
       },
     };
   }
-  return null;
+  // v2 (Domeo 4.0): 11 items, 9 stats, generation 1. v3 adds gathering,
+  // discoveries and keeps the original world generator for old journeys.
+  if (current.version === 2) {
+    current = {
+      ...current,
+      version: 3,
+      inventory: { ...emptyItems(), ...current.inventory },
+      stats: { ...emptyStats(), ...current.stats },
+      home: current.home ?? null,
+      chest: { ...emptyItems(), ...current.chest },
+      explored: Array.isArray(current.explored) ? current.explored : [],
+      discovered: Array.isArray(current.discovered) ? current.discovered : [],
+      world: {
+        ...current.world,
+        generationVersion: current.world?.generationVersion ?? 1,
+      },
+    };
+  }
+  return current.version === SAVE_VERSION ? current : null;
 }
 
 // Treat localStorage as untrusted input, including old/incomplete save formats.
@@ -74,7 +95,7 @@ export function validateSave(data) {
   if (!validInventory(save.inventory)) return false;
   if (!STAT_KEYS.every((id) => number(save.stats[id] ?? 0))) return false;
   if (typeof save.torchLit !== 'boolean' || !integer(save.world.seed, 0, 0xffffffff)) return false;
-  if (!integer(save.world.generationVersion ?? WORLD_GEN_VERSION, 1, 99)) return false;
+  if (!integer(save.world.generationVersion ?? 1, 1, 99)) return false;
   if (save.home !== null) {
     if (
       !object(save.home) ||
@@ -87,6 +108,10 @@ export function validateSave(data) {
   if (!Array.isArray(save.explored) || save.explored.length > MAX_EXPLORED) return false;
   for (const key of save.explored) {
     if (typeof key !== 'string' || !/^-?\d{1,5},-?\d{1,5}$/.test(key)) return false;
+  }
+  if (!Array.isArray(save.discovered) || save.discovered.length > MAX_DISCOVERIES) return false;
+  for (const key of save.discovered) {
+    if (typeof key !== 'string' || !/^lm:-?\d{1,5},-?\d{1,5}$/.test(key)) return false;
   }
   const { changes, structures } = save.world;
   if (
@@ -101,10 +126,10 @@ export function validateSave(data) {
     if (
       !object(change) ||
       typeof change.id !== 'string' ||
-      !/^(start:\d{1,2}|-?\d{1,5},-?\d{1,5}:\d{1,2})$/.test(change.id) ||
+      !/^(start:(gar)?\d{1,2}|-?\d{1,5},-?\d{1,5}:\d{1,2})$/.test(change.id) ||
       ids.has(change.id) ||
       !integer(change.remaining, 0, 3) ||
-      !number(change.respawnAt, 0, save.elapsed + 121)
+      !number(change.respawnAt, 0, save.elapsed + 301)
     )
       return false;
     ids.add(change.id);

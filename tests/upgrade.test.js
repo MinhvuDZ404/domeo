@@ -1,4 +1,6 @@
-// 4.0 migrates a 2.0/3.0 save (schema 1) to schema 2 without changing the world.
+// 5.0 migrates 2.0/3.0 (schema 1) and 4.0 (schema 2) saves to schema 3.
+// Old journeys keep their original world generator (v1); only new journeys
+// use generation v2 with biomes and landmarks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/game.js';
@@ -32,22 +34,50 @@ function domeoTwoSave() {
   };
 }
 
-test('the release reports itself as 4.0 and writes save version 2', () => {
-  // A patch release keeps the 4.0 save format and the 2.0/3.0 journeys readable.
-  assert.match(GAME_VERSION, /^4\.0\.\d+$/);
-  assert.equal(SAVE_VERSION, 2);
-  assert.equal(new Game(1).snapshot().version, 2);
+function domeoFourSave() {
+  const game = new Game(404);
+  const snapshot = game.snapshot();
+  // Simulate a 4.0-era payload: schema 2, generation 1, no v5 fields.
+  const { discovered, ...rest } = snapshot;
+  assert.ok(discovered !== undefined);
+  return {
+    ...rest,
+    version: 2,
+    inventory: Object.fromEntries(
+      Object.entries(rest.inventory).filter(
+        ([key]) => !['mushroom', 'herb', 'crystal', 'salve', 'lantern'].includes(key),
+      ),
+    ),
+    stats: Object.fromEntries(
+      Object.entries(rest.stats).filter(
+        ([key]) => !['mushrooms', 'herbs', 'crystals', 'landmarks', 'nights'].includes(key),
+      ),
+    ),
+    world: { ...rest.world, generationVersion: 1 },
+  };
+}
+
+test('the release reports itself as 5.0 and writes save version 3', () => {
+  assert.match(GAME_VERSION, /^5\.0\.\d+$/);
+  assert.equal(SAVE_VERSION, 3);
+  assert.equal(new Game(1).snapshot().version, 3);
   assert.equal(new Game(1).world.generationVersion, WORLD_GEN_VERSION);
+  assert.equal(WORLD_GEN_VERSION, 2);
 });
 
 test('a 2.0 journey still validates, restores and saves without losing anything', () => {
   const data = domeoTwoSave();
   assert.equal(validateSave(data), true);
   const migrated = migrateSave(data);
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.equal(migrated.inventory.cooked, 0);
   assert.equal(migrated.inventory.chest, 0);
+  assert.equal(migrated.inventory.mushroom, 0);
+  assert.equal(migrated.inventory.lantern, 0);
   assert.equal(migrated.home, null);
+  assert.deepEqual(migrated.discovered, []);
+  // The old world generator is preserved: the forest must not shift.
+  assert.equal(migrated.world.generationVersion, 1);
   const storage = {
     map: new Map([[SAVE_KEY, JSON.stringify(data)]]),
     getItem(key) {
@@ -64,13 +94,27 @@ test('a 2.0 journey still validates, restores and saves without losing anything'
   assert.equal(restored.inventory.axe, 1);
   assert.equal(restored.inventory.cooked, 0);
   assert.deepEqual(restored.world.structures, data.world.structures);
+  assert.equal(restored.world.generationVersion, 1);
   assert.equal(restored.world.getState({ id: 'start:0', type: 'bush' }, 96.35).remaining, 1);
   restored.update(0.05, { x: 1, y: 0 });
   const saved = restored.snapshot();
   assert.equal(saved.world.seed, 404);
-  assert.equal(saved.world.generationVersion, WORLD_GEN_VERSION);
+  assert.equal(saved.world.generationVersion, 1);
   assert.equal(writeSave(saved, storage).ok, true);
   assert.equal(readSave(storage).data.world.seed, 404);
+});
+
+test('a 4.0 journey migrates to schema 3 and keeps its world', () => {
+  const data = domeoFourSave();
+  assert.equal(validateSave(data), true);
+  const migrated = migrateSave(data);
+  assert.equal(migrated.version, 3);
+  assert.equal(migrated.world.generationVersion, 1);
+  assert.equal(migrated.inventory.salve, 0);
+  assert.equal(migrated.stats.landmarks, 0);
+  const restored = Game.restore(migrateSave(data));
+  assert.equal(restored.world.generationVersion, 1);
+  assert.equal(restored.discovered.size, 0);
 });
 
 test('a 2.0 save with a full inventory of every item is still accepted', () => {

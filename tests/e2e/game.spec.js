@@ -38,8 +38,8 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await ready(page);
   await expect(page).toHaveTitle('Domeo — Một chuyến đi hoang dã');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Đi lạc một chút.');
-  await expect(page.locator('#edition-label')).toContainText('v4.0');
-  await expect(page.locator('#edition-label i')).toHaveText('v4.0');
+  await expect(page.locator('#edition-label')).toContainText('v5.0');
+  await expect(page.locator('#edition-label i')).toHaveText('v5.0');
   await expect(page.locator('#continue-button')).toBeHidden();
   await page.locator('#help-button').click();
   await expect(page.locator('#help-dialog')).toBeVisible();
@@ -144,6 +144,56 @@ test('gather, eat, craft every recipe, place a fire and reload the saved world',
   expect(after.world.structures).toEqual(before.world.structures);
   expect(after.world.changes.length).toBe(1);
   expect(after.torchLit).toBe(false);
+});
+
+test('forage, brew a salve, heal and light a lantern', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const picker = new Game(404);
+  Object.assign(picker.player, { x: 260, y: -155 });
+  await restore(page, picker.snapshot());
+  await expect(page.locator('#interaction-label')).toHaveText('Hái nấm rừng');
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('[data-item="mushroom"] small')).toHaveText('×1');
+  await page.keyboard.press('Escape');
+  const game = new Game(404);
+  Object.assign(game.player, { x: 0, y: 0, health: 50, hunger: 30, direction: 'left' });
+  Object.assign(game.inventory, { mushroom: 2, herb: 1, lantern: 1 });
+  await restore(page, game.snapshot());
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('[data-craft="salve"]')).toBeEnabled();
+  await page.locator('[data-craft="salve"]').click();
+  await page.locator('#bag-tab').click();
+  await expect(page.locator('[data-item="salve"] small')).toHaveText('×1');
+  await expect(page.locator('[data-item="mushroom"] small')).toHaveText('×0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('KeyG');
+  await expect(page.locator('#health-bar')).toHaveAttribute('aria-valuenow', '85');
+  await page.keyboard.press('Digit8');
+  await expect(page.locator('#placement-bar')).toBeVisible();
+  await expect(page.locator('#placement-name')).toHaveText('Đặt đèn lồng');
+  await page.keyboard.press('KeyE');
+  await expect(page.locator('#placement-bar')).toBeHidden();
+  expect((await saved(page)).world.structures).toEqual([
+    { id: 'built:0', type: 'lantern', x: -64, y: 0 },
+  ]);
+  expect(errors).toEqual([]);
+});
+
+test('walking to a landmark celebrates the discovery and remembers it', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(7);
+  const landmarks = game.world.getLandmarks({ x: -2000, y: -2000, width: 4000, height: 4000 });
+  landmarks.sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
+  Object.assign(game.player, { x: landmarks[0].x + 100, y: landmarks[0].y });
+  await restore(page, game.snapshot());
+  await expect(page.locator('#toast-region')).toContainText('Đã khám phá', { timeout: 8000 });
+  await expect(page.locator('#journal-footer')).toContainText('1 địa danh');
+  await expect(page.locator('#goal-count')).not.toHaveText('0/11');
+  expect((await saved(page)).discovered.length).toBe(1);
+  expect(errors).toEqual([]);
 });
 
 test('a chest stores items both ways and the world keeps running around it', async ({ page }) => {
