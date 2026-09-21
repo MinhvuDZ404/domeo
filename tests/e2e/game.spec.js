@@ -38,8 +38,8 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await ready(page);
   await expect(page).toHaveTitle('Domeo — Một chuyến đi hoang dã');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Đi lạc một chút.');
-  await expect(page.locator('#edition-label')).toContainText('v5.1');
-  await expect(page.locator('#edition-label i')).toHaveText('v5.1');
+  await expect(page.locator('#edition-label')).toContainText('v5.0');
+  await expect(page.locator('#edition-label i')).toHaveText('v5.0');
   await expect(page.locator('#continue-button')).toBeHidden();
   await page.locator('#help-button').click();
   await expect(page.locator('#help-dialog')).toBeVisible();

@@ -1,5 +1,5 @@
-export const GAME_VERSION = '5.1.0';
-export const GAME_LABEL = 'v5.1';
+export const GAME_VERSION = '5.0.0';
+export const GAME_LABEL = 'v5.0';
 
 export const DAY_LENGTH = 1440;
 export const DAY_OFFSET = DAY_LENGTH * 0.2;
@@ -9,7 +9,7 @@ export const PLAYER_SPEED = 170;
 export const INTERACTION_DISTANCE = 68;
 export const MAX_STACK = 999;
 export const MAX_STRUCTURES = 100;
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'domeo.journey.v1';
 export const LOCK_KEY = 'domeo.lock.v1';
 export const WORLD_GEN_VERSION = 2;
@@ -33,7 +33,7 @@ export const MUSHROOM_HUNGER = 15;
 export const MUSHROOM_HEALTH = 2;
 export const SALVE_HEALTH = 35;
 
-export const UNIQUE_ITEMS = ['axe', 'pickaxe', 'torch', 'beaconCore', 'refinedBlade'];
+export const UNIQUE_ITEMS = ['axe', 'pickaxe', 'torch'];
 export const PLACEABLE = ['campfire', 'wall', 'chest', 'lantern'];
 export const STAT_KEYS = [
   'berries',
@@ -82,24 +82,6 @@ export const ITEMS = {
     icon: 'crystal',
     kind: 'Đặc biệt',
     description: 'Tinh thể phát sáng trong vùng đá. Dùng để chế đèn lồng.',
-  },
-  guardianShard: {
-    name: 'Mảnh hộ vệ',
-    icon: 'crystal',
-    kind: 'Đặc biệt',
-    description: 'Mảnh đá ấm còn lại sau một cuộc chạm trán. Dùng để khôi phục hải đăng.',
-  },
-  beaconCore: {
-    name: 'Lõi hải đăng',
-    icon: 'lantern',
-    kind: 'Kỷ vật',
-    description: 'Ánh sáng của hành trình đã hoàn thành. Khu rừng vẫn rộng mở.',
-  },
-  refinedBlade: {
-    name: 'Lưỡi rìu tinh luyện',
-    icon: 'axe',
-    kind: 'Công cụ',
-    description: 'Chế tại bàn thợ. Đòn đánh mạnh hơn nhưng vẫn gọn và dễ dùng.',
   },
   salve: {
     name: 'Cao dán thảo mộc',
@@ -178,12 +160,6 @@ export const RECIPES = [
   { id: 'chest', costs: { wood: 6, fiber: 2 } },
   { id: 'salve', costs: { mushroom: 2, herb: 1 } },
   { id: 'lantern', costs: { wood: 4, fiber: 2, crystal: 1 } },
-  {
-    id: 'refinedBlade',
-    costs: { wood: 5, stone: 6, guardianShard: 1 },
-    unique: true,
-    campLevel: 2,
-  },
 ];
 
 export const RESOURCES = {

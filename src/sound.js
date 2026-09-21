@@ -9,13 +9,6 @@ const NOTES = {
   death: [280, 220, 160],
   discovery: [523, 659, 784, 1047],
   message: [660],
-  attack: [240, 180],
-  hit: [150, 105],
-  playerHit: [130, 82],
-  telegraph: [310, 360],
-  enemyDeath: [220, 165, 110],
-  quest: [523, 659, 880],
-  campUpgrade: [294, 440, 587, 784],
 };
 const CHIRPS = [
   [1180, 1520],
@@ -32,13 +25,6 @@ const COOLDOWNS = {
   deny: 200,
   discovery: 500,
   message: 0,
-  attack: 180,
-  hit: 90,
-  playerHit: 350,
-  telegraph: 250,
-  enemyDeath: 250,
-  quest: 500,
-  campUpgrade: 500,
 };
 
 export class Sound {
