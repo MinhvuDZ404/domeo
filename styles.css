@@ -2011,6 +2011,32 @@ h2 {
   .save-button {
     display: none;
   }
+  /* 4.0 added a seventh item slot (the chest), which pushed the hotbar past the
+     right edge on 320 px screens. The row now shares the width it is given
+     instead of keeping a fixed slot width. */
+  .bottom-dock {
+    width: calc(100% - 16px);
+    max-width: 420px;
+  }
+  .hotbar {
+    justify-content: center;
+  }
+  .hotbar-slot {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: 48px;
+  }
+  /* In the narrow card the compass and the mini-map stack instead of overflowing. */
+  .wayfinding {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    row-gap: 8px;
+  }
+  .mini-map {
+    width: 64px;
+    height: 64px;
+  }
 }
 @media (max-width: 380px) {
   /* Very narrow screens keep the essentials; settings stay reachable from the

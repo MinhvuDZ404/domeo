@@ -16,6 +16,10 @@ Bản sửa nhanh cho 4.0: **trò chơi đơ ngay khi bắt đầu hành trình*
 - **Chuyển đồ với rương:** các nút trong rương gọi một biến không tồn tại nên mọi cú nhấp đều lỗi.
   Cất và lấy đồ nay đi qua hàm `transfer` được truyền vào `UI`, đúng như phần còn lại của giao diện.
 - Tab **Rương** chỉ hiện khi có rương đang mở; điều hướng bằng phím mũi tên bỏ qua tab đang ẩn.
+- **Thanh đồ tràn ra ngoài màn hình 320 px:** bản 4.0 thêm ô thứ bảy (Rương) nên dãy ô
+  vượt khỏi mép phải. Trên màn hình hẹp, các ô nay chia đều bề ngang còn lại thay vì giữ
+  nguyên kích thước, và thẻ la bàn/bản đồ nhỏ tự xuống dòng. Kịch bản trình duyệt kiểm tra
+  bố cục dọc và ngang đã bắt được lỗi này.
 
 ### Kiểm thử
 
