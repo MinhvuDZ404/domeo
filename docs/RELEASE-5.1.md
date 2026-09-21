@@ -15,7 +15,7 @@ Schema tăng từ 3 lên 4. Migration 5.0 → 5.1 thêm các trường `camp`, `
 
 ## Kiểm thử và hiệu năng
 
-Các kiểm thử logic bao phủ combat, quest, nâng trại, nhận thưởng một lần và migration. Chạy các lệnh trong checklist bên dưới để xem kết quả tại commit phát hành. AI không chạy mỗi render frame; particles, enemies, lights, chunks và save records đều có hard cap.
+Các kiểm thử logic bao phủ combat, quest, nâng trại, nhận thưởng một lần và migration. Tại commit phát hành: 95 logic tests pass; format, performance budget và balance script pass; GitHub Actions chạy đủ 24 Playwright scenarios và pass. AI không chạy mỗi render frame; particles, enemies, lights, chunks và save records đều có hard cap.
 
 ## Giới hạn đã biết
 
@@ -26,13 +26,13 @@ Các kiểm thử logic bao phủ combat, quest, nâng trại, nhận thưởng 
 
 ## Release checklist
 
-- [ ] `npm ci`
-- [ ] `npm test`
-- [ ] `npm run format:check`
-- [ ] `npm run perf`
-- [ ] `npm run perf:check`
-- [ ] `npm run balance`
-- [ ] `npm run test:e2e`
+- [x] `npm ci`
+- [x] `npm test`
+- [x] `npm run format:check`
+- [x] `npm run perf`
+- [x] `npm run perf:check`
+- [x] `npm run balance`
+- [x] `npm run test:e2e` (GitHub Actions, 24/24)
 - [ ] Chromium desktop playtest: gather → camp → landmark → combat → upgrade → save/reload
 - [ ] Mobile portrait/landscape controls and modal check
 - [ ] Firefox desktop manual pass
