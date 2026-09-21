@@ -4,7 +4,11 @@ Game sinh tồn 2D góc nhìn từ trên xuống, viết bằng **JavaScript thu
 
 Trang GitHub Pages của dự án: <https://minhvudz404.github.io/domeo/>. Các thay đổi mới chỉ xuất hiện trên trang này sau khi nhánh dùng để triển khai được cập nhật.
 
-## Có gì trong bản 5.0?
+## Có gì trong bản 5.1?
+
+Domeo 5.1 kết nối khám phá với một **Hành Trình Hoang Dã** gồm 8 chặng: chuẩn bị trại, tìm địa danh, đối mặt hoặc né hiểm nguy, thu mảnh hộ vệ, dựng bàn thợ và khôi phục hải đăng để tìm Hộ Vệ Cổ. Combat nhẹ dùng `Space` hoặc nút **Đánh** cảm ứng; đòn mạnh đều có báo hiệu và căn trại là vùng an toàn, nên chiến đấu không bắt buộc mọi lúc. Trại có 3 cấp và vật liệu chiến đấu mở utility thay vì XP/level. Save 5.0 tự migration, thế giới generation v1/v2 không thay đổi.
+
+## Nền tảng từ 5.0
 
 Bản 5.0 cho bạn **một khu rừng đáng đi xa**: 6 vùng sinh thái, 6 loại địa danh để khám phá, hái lượm
 mở rộng (nấm, thảo mộc, tinh thể), cao dán hồi máu, đèn lồng tinh thể, thời tiết theo seed, và một
@@ -49,12 +53,12 @@ Bản bên dưới là nội dung 2.0 đã có sẵn và vẫn đúng:
 - **Khám phá:** thế giới sinh theo seed, camera bám nhân vật, vùng xuất phát an toàn và tài nguyên khởi đầu được bảo đảm. Từ 5.0: 6 vùng sinh thái (đồng cỏ, rừng, rừng sâu, rừng sương, vùng đá, rừng cổ thụ), 6 loại địa danh có quà khám phá, và thời tiết (quang, mây, sương, mưa) đi theo seed.
 - **Sinh tồn:** máu, độ no, ăn quả, chu kỳ ngày–đêm dài 24 phút (1440 giây mô phỏng), đuốc và ánh sáng lửa trại. Đứng gần lửa khi độ no trên 20 sẽ hồi máu.
 - **Hái lượm:** nhặt cành khô, đá cuội, hái quả/sợi; dùng rìu chặt cây và cuốc khai thác tảng đá. Từ 5.0: hái nấm rừng, thảo mộc (kèm sợi) và gỡ tinh thể bằng cuốc.
-- **Túi đồ & chế tạo:** 16 loại vật phẩm, 8 công thức, kiểm tra nguyên liệu, công cụ tự sử dụng, hotbar, đặt lửa trại, hàng rào, rương và đèn lồng.
+- **Túi đồ & chế tạo:** 19 loại vật phẩm, 9 công thức, kiểm tra nguyên liệu, công cụ tự sử dụng, hotbar, đặt lửa trại, hàng rào, rương và đèn lồng.
 - **Giao diện:** menu, hướng dẫn, mục tiêu khởi đầu, tạm dừng, chơi lại, âm thanh tương tác tùy chọn, thông báo và hỗ trợ bàn phím trong hộp thoại.
 - **Điện thoại:** giao diện co giãn, joystick cảm ứng, nút hái lượm/ăn quả, hỗ trợ màn hình dọc và ngang.
 - **Lưu tiến trình:** tự lưu mỗi 15 giây _thời gian chơi_, lưu thủ công và lưu khi ẩn/rời trang. Có xác nhận trước khi thay thế một hành trình còn sống.
 
-Đây là bản chơi đơn tập trung vào khám phá và chế tạo. Chưa có quái vật, chiến đấu, nhà hoàn chỉnh hay đồng bộ nhiều thiết bị.
+Đây là game chơi đơn tập trung vào khám phá, sinh tồn và chuẩn bị chuyến đi. Không có backend hay đồng bộ nhiều thiết bị.
 
 ## Chạy tại máy
 
@@ -76,21 +80,23 @@ python3 -m http.server 5173 --bind 0.0.0.0
 
 ## Điều khiển
 
-| Phím                   | Tác dụng                                                |
-| ---------------------- | ------------------------------------------------------- |
-| `WASD` / mũi tên       | Di chuyển, tốc độ chéo đã được chuẩn hóa                |
-| `E` (có thể giữ)       | Hái lượm/chặt cây/đào đá/gỡ tinh thể gần nhất           |
-| `F` / `1`              | Ăn một quả: +25 no, +3 máu                              |
-| `G`                    | Dùng cao dán thảo mộc: +35 máu                          |
-| `B` / `Tab`            | Mở túi đồ; `B` lần nữa hoặc `Esc` để đóng               |
-| `C`                    | Mở mục chế tạo                                          |
-| `2` / `3`              | Xem trạng thái rìu/cuốc; mở chế tạo nếu chưa có         |
-| `4` / `6` / `7` / `8`  | Chọn đặt lửa trại/hàng rào/rương/đèn lồng đã chế tạo    |
-| Nhấp/chạm đất hoặc `E` | Xác nhận vị trí xây đang chọn                           |
-| `5`                    | Bật/tắt đuốc đã chế tạo                                 |
-| `H`                    | Đánh dấu nhà tại vị trí hiện tại                        |
-| `O` / `M`              | Mở cài đặt / bật-tắt âm thanh                           |
-| `Esc`                  | Hủy đặt công trình, đóng túi đồ/hướng dẫn hoặc tạm dừng |
+| Phím                   | Tác dụng                                                            |
+| ---------------------- | ------------------------------------------------------------------- |
+| `WASD` / mũi tên       | Di chuyển, tốc độ chéo đã được chuẩn hóa                            |
+| `E` (có thể giữ)       | Hái lượm/chặt cây/đào đá/gỡ tinh thể gần nhất                       |
+| `F` / `1`              | Ăn một quả: +25 no, +3 máu                                          |
+| `G`                    | Dùng cao dán thảo mộc: +35 máu                                      |
+| `B` / `Tab`            | Mở túi đồ; `B` lần nữa hoặc `Esc` để đóng                           |
+| `C`                    | Mở mục chế tạo                                                      |
+| `2` / `3`              | Xem trạng thái rìu/cuốc; mở chế tạo nếu chưa có                     |
+| `4` / `6` / `7` / `8`  | Chọn đặt lửa trại/hàng rào/rương/đèn lồng đã chế tạo                |
+| Nhấp/chạm đất hoặc `E` | Xác nhận vị trí xây đang chọn                                       |
+| `5`                    | Bật/tắt đuốc đã chế tạo                                             |
+| `Space`                | Tấn công theo hướng đang nhìn (có hỗ trợ mục tiêu gần trên cảm ứng) |
+| `J`                    | Mở bảng nâng cấp căn trại                                           |
+| `H`                    | Đánh dấu nhà tại vị trí hiện tại                                    |
+| `O` / `M`              | Mở cài đặt / bật-tắt âm thanh                                       |
+| `Esc`                  | Hủy đặt công trình, đóng túi đồ/hướng dẫn hoặc tạm dừng             |
 
 Trên điện thoại, dùng joystick ở góc trái, các nút cảm ứng và thanh vật phẩm. Công trình cần vùng đất trống, không quá gần hoặc quá xa nhân vật; bóng xem trước màu xanh biểu thị vị trí hợp lệ.
 
@@ -111,7 +117,7 @@ Rìu, cuốc và đuốc chỉ cần chế tạo một lần. Mỗi loại vật
 
 ## Cách lưu hoạt động
 
-- Một bản lưu JSON có phiên bản tại khóa `domeo.journey.v1` trong `localStorage` (tên khóa giữ nguyên để tương thích; cấu trúc dữ liệu là phiên bản 3 từ bản 5.0).
+- Một bản lưu JSON có phiên bản tại khóa `domeo.journey.v1` trong `localStorage` (tên khóa giữ nguyên để tương thích; cấu trúc dữ liệu là phiên bản 4 từ bản 5.1).
 - Lưu seed, phiên bản sinh thế giới, vị trí, máu/no, túi đồ, mục tiêu, công trình, địa danh đã khám phá và những tài nguyên đang hồi; **không lưu toàn bộ chunk đã khám phá**.
 - Thời gian sinh tồn không trôi khi mở túi đồ, tạm dừng hoặc rời game. Khi quay lại tab, cần chủ động tiếp tục.
 - Bản lưu hỏng, sai phiên bản, quá lớn hoặc chứa giá trị không hợp lệ được từ chối. Lỗi bộ nhớ đầy/bị chặn có thông báo, không làm sập game.
@@ -129,7 +135,7 @@ Rìu, cuốc và đuốc chỉ cần chế tạo một lần. Mỗi loại vật
 
 ```sh
 npm ci
-npm test                 # 89 kiểm thử logic bằng node:test
+npm test                 # 94+ kiểm thử logic bằng node:test
 npm run perf             # đo thời gian xử lý mỗi bước và truy vấn vật thể
 npm run perf:check       # thoát mã lỗi nếu vượt ngân sách hiệu năng
 npm run balance          # mô phỏng nhịp chơi, in báo cáo cân bằng
@@ -157,6 +163,8 @@ index.html             Giao diện và hộp thoại truy cập được bằng 
 styles.css             Bố cục, màu sắc, responsive, reduced-motion
 main.js                Vòng lặp, chuyển trạng thái màn hình, lưu và nối các module
 src/
+  combat.js            Combat/AI bounded và spawn theo seed
+  progression.js       Quest, phần thưởng và cấp căn trại
   config.js            Hằng số cân bằng, vật phẩm, công thức và đồng hồ ngày–đêm
   world.js             Sinh chunk, LRU, tài nguyên, hitbox và công trình
   game.js              Mô phỏng và các hành động; không phụ thuộc DOM

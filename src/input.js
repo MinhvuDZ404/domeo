@@ -22,6 +22,8 @@ const actions = {
   Digit8: 'lantern',
   KeyG: 'salve',
   KeyH: 'home',
+  Space: 'attack',
+  KeyJ: 'camp',
   KeyM: 'mute',
   KeyO: 'options',
   Escape: 'escape',
@@ -135,6 +137,12 @@ export class Input {
         this.touchInteract = false;
       });
     document.getElementById('touch-eat').addEventListener('click', () => action('eat'));
+    const attack = document.getElementById('touch-attack');
+    attack?.addEventListener('pointerdown', (event) => {
+      if (!active()) return;
+      event.preventDefault();
+      action('attack');
+    });
   }
   movement() {
     const has = (...codes) => (codes.some((code) => this.keys.has(code)) ? 1 : 0);

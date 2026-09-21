@@ -2264,6 +2264,64 @@ dialog .toast {
 #game-hud .glass-panel {
   pointer-events: auto;
 }
+.journal-camp-button {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #5b69454a;
+  padding: 9px;
+  background: transparent;
+  color: #536044;
+  font:
+    700 10px 'Be Vietnam Pro',
+    sans-serif;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.camp-details {
+  text-align: left;
+  margin: 18px 0;
+}
+.camp-details h3 {
+  color: #334536;
+  margin: 12px 0 4px;
+}
+.camp-details p {
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+.camp-details hr {
+  border: 0;
+  border-top: 1px solid #6e795b45;
+}
+.camp-costs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+.camp-costs span {
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: #66755317;
+  font-size: 12px;
+}
+.camp-costs .missing {
+  color: #a04e42;
+  background: #a04e4212;
+}
+.touch-attack {
+  color: #f0ddaa;
+  font-size: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.touch-attack small {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
 /* Keep the active journal step readable without covering the mobile play area. */
 @media (max-width: 700px) {
   .journal-card .goal:not(.active) {

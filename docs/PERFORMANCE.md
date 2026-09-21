@@ -109,3 +109,9 @@ bảng thông số sẽ cho biết chênh lệch.
   không rò rỉ bộ nhớ.
 - Bảng thông số chỉ là số đo hiển thị, không gửi dữ liệu đi đâu; game vẫn không có theo dõi hành vi
   và không gọi dịch vụ ngoài.
+
+## Bổ sung đo 5.1: combat và progression
+
+Ngày 2026-09-21, `npm run perf:check` trên Node v22.22.3 với logic 5.1 đạt **simulation p95 0,103 ms**, **max 3,731 ms** và **world query p95 0,222 ms** (ngân sách lần lượt 2,5 ms / 8 ms / 1,2 ms). Số đo thay đổi theo máy và không phải cam kết FPS trình duyệt.
+
+Combat dùng tick AI 10 Hz, spawn check 1,25 giây, tối đa 7 enemy hoạt động, despawn ngoài 900 px và tối đa 80 cooldown record trong save. Renderer cộng enemy vào thống kê entity; particle/light/chunk cap cũ vẫn giữ nguyên. Việc tải Chromium để chạy đo trình duyệt trong phiên này thất bại do CDN reset kết nối, vì vậy FPS desktop/mobile thật vẫn là manual release check, không được tuyên bố đã xác nhận.

@@ -362,12 +362,25 @@ export class Renderer {
           s.y > bounds.y - 100 &&
           s.y < bounds.y + bounds.height + 100,
       ),
+      ...(game.combat?.enemies ?? []).map((enemy) => ({
+        ...enemy,
+        type: 'enemy',
+        enemyType: enemy.type,
+      })),
+      ...(game.home && game.camp?.level >= 2
+        ? [{ type: 'workbench', x: game.home.x + 72, y: game.home.y + 18 }]
+        : []),
+      ...(game.home && game.camp?.level >= 3
+        ? [{ type: 'beacon', x: game.home.x - 72, y: game.home.y - 4 }]
+        : []),
       { type: 'player', x: p.x, y: p.y },
     ];
     objects.sort((a, b) => a.y - b.y);
     for (const obj of objects) {
       try {
         if (obj.type === 'player') this.drawPlayer(p, game.torchLit, time);
+        else if (obj.type === 'enemy') this.drawEnemy(obj, time);
+        else if (obj.type === 'workbench' || obj.type === 'beacon') this.drawCampUpgrade(obj, time);
         else this.drawEntity(obj, time, p, game);
       } catch {
         // One broken decoration must never kill the whole frame.
@@ -400,7 +413,7 @@ export class Renderer {
     this.drawEffects(time);
     ctx.restore();
     this.updateParticles(dt);
-    this.stats.entities = world.length + landmarks.length;
+    this.stats.entities = world.length + landmarks.length + (game.combat?.enemies.length ?? 0);
     this.stats.structures = game.world.structures.length;
   }
   // A light hand on colour: warm when the sun is low, cool and dim at night.
@@ -807,6 +820,105 @@ export class Renderer {
       } else {
         drawLandmark(ctx, type, x, y, entity.variant ?? 0.5, time, night);
       }
+    }
+  }
+  drawEnemy(enemy, time) {
+    const ctx = this.ctx,
+      x = enemy.x,
+      y = enemy.y;
+    const ancient = enemy.enemyType === 'ancient',
+      stone = enemy.enemyType === 'guardian' || ancient;
+    this.shadow(x, y, ancient ? 30 : 18, ancient ? 11 : 7);
+    ctx.save();
+    if (enemy.hitFlash > 0) ctx.globalAlpha = 0.55;
+    if (enemy.state === 'windup') {
+      ctx.strokeStyle = '#e6b07a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, ancient ? 44 : 30, ancient ? 20 : 13, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (stone) {
+      ctx.fillStyle = ancient ? '#48564c' : '#62685b';
+      ctx.beginPath();
+      ctx.moveTo(x - 18, y);
+      ctx.lineTo(x - 14, y - 34);
+      ctx.lineTo(x, y - 47);
+      ctx.lineTo(x + 17, y - 29);
+      ctx.lineTo(x + 20, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#95a58a';
+      ctx.fillRect(x - 11, y - 30, 7, 6);
+      ctx.fillRect(x + 6, y - 30, 7, 6);
+      ctx.fillStyle = ancient ? '#e7c778' : '#a9d6c0';
+      ctx.fillRect(x - 8, y - 28, 3, 2);
+      ctx.fillRect(x + 8, y - 28, 3, 2);
+      ctx.strokeStyle = '#7d936d';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y - 8);
+      ctx.lineTo(x - 15, y - 18);
+      ctx.moveTo(x + 4, y - 12);
+      ctx.lineTo(x + 13, y - 23);
+      ctx.stroke();
+    } else {
+      const wisp = enemy.enemyType === 'wisp';
+      ctx.fillStyle = wisp ? '#536273' : '#4b5840';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 17, 16, 22 + Math.sin(time / 180 + x) * 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = wisp ? '#b9d6e8' : '#d8c47f';
+      ctx.fillRect(x - 8, y - 23, 4, 3);
+      ctx.fillRect(x + 4, y - 23, 4, 3);
+      ctx.fillStyle = wisp ? '#697b8b' : '#62714f';
+      ctx.beginPath();
+      ctx.moveTo(x - 12, y - 34);
+      ctx.lineTo(x - 17, y - 46);
+      ctx.lineTo(x - 5, y - 38);
+      ctx.moveTo(x + 11, y - 34);
+      ctx.lineTo(x + 17, y - 45);
+      ctx.lineTo(x + 5, y - 38);
+      ctx.fill();
+    }
+    const ratio = Math.max(0, enemy.health / enemy.maxHealth);
+    if (ratio < 1 || ancient) {
+      ctx.fillStyle = '#1d2924aa';
+      ctx.fillRect(x - 22, y - 55, 44, 4);
+      ctx.fillStyle = '#bd745f';
+      ctx.fillRect(x - 22, y - 55, 44 * ratio, 4);
+    }
+    ctx.restore();
+  }
+  drawCampUpgrade(object, time) {
+    const ctx = this.ctx,
+      { x, y } = object;
+    this.shadow(x, y, 27, 8);
+    if (object.type === 'workbench') {
+      ctx.fillStyle = '#604c31';
+      ctx.fillRect(x - 28, y - 21, 56, 10);
+      ctx.fillRect(x - 23, y - 11, 6, 20);
+      ctx.fillRect(x + 17, y - 11, 6, 20);
+      ctx.fillStyle = '#aa8d58';
+      ctx.fillRect(x - 26, y - 25, 52, 5);
+      ctx.fillStyle = '#87907c';
+      ctx.fillRect(x - 8, y - 31, 24, 4);
+      ctx.fillRect(x + 9, y - 38, 4, 10);
+    } else {
+      ctx.fillStyle = '#596152';
+      ctx.beginPath();
+      ctx.moveTo(x - 19, y);
+      ctx.lineTo(x - 10, y - 66);
+      ctx.lineTo(x + 10, y - 66);
+      ctx.lineTo(x + 19, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#d6b867';
+      ctx.fillRect(x - 14, y - 49, 28, 7);
+      ctx.fillStyle = `rgba(225,205,120,${0.7 + Math.sin(time / 300) * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(x, y - 69, 9, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   drawPlayer(player, torchLit, time) {
