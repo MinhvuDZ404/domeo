@@ -1,10 +1,16 @@
-import { CHUNK_SIZE, MAX_CACHED_CHUNKS, RESOURCES, WORLD_LIMIT } from './config.js';
+import {
+  CHUNK_SIZE,
+  MAX_CACHED_CHUNKS,
+  RESOURCES,
+  WORLD_GEN_VERSION,
+  WORLD_LIMIT,
+} from './config.js';
 
 // Buildings keep resources from regrowing on their footprint. Checking every
 // building for every entity made the cost of a base grow with its size, so
 // structures are bucketed into a coarse grid instead.
 export const STRUCTURE_CELL = 64;
-export const STRUCTURE_CLEARANCE = { wall: 48, campfire: 42, default: 42 };
+export const STRUCTURE_CLEARANCE = { wall: 48, campfire: 42, chest: 42, default: 42 };
 export const clearanceFor = (type) => STRUCTURE_CLEARANCE[type] ?? STRUCTURE_CLEARANCE.default;
 
 // An integer hash preserves signs; unlike abs(x ^ y), opposite chunks do not mirror.
@@ -86,8 +92,9 @@ export function overlaps(a, b) {
 }
 
 export class World {
-  constructor(seed = 404, changes = [], structures = []) {
+  constructor(seed = 404, changes = [], structures = [], generationVersion = WORLD_GEN_VERSION) {
     this.seed = seed >>> 0;
+    this.generationVersion = generationVersion ?? WORLD_GEN_VERSION;
     this.chunks = new Map();
     this.changes = new Map(changes.map((change) => [change.id, { ...change }]));
     this.structures = structures.map((s) => ({ ...s }));
@@ -217,6 +224,7 @@ export class World {
     this.prune(elapsed);
     return {
       seed: this.seed,
+      generationVersion: this.generationVersion,
       changes: [...this.changes.values()],
       structures: this.structures.map((s) => ({ ...s })),
     };

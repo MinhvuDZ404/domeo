@@ -4,7 +4,15 @@ import { Input } from './src/input.js';
 import { UI } from './src/ui.js';
 import { Sound } from './src/sound.js';
 import { GAME_LABEL, GAME_VERSION, ITEMS, getDayInfo } from './src/config.js';
-import { readSave, writeSave } from './src/storage.js';
+import {
+  readSave,
+  writeSave,
+  parseImportedSave,
+  claimLock,
+  heartbeatLock,
+  releaseLock,
+  sessionId,
+} from './src/storage.js';
 import { DEFAULT_SETTINGS, readSettings, writeSettings } from './src/settings.js';
 import { icon } from './src/icons.js';
 
@@ -51,6 +59,12 @@ const ui = new UI({
   selectTab: (tab) => {
     ui.setTab(tab);
     ui.renderInventory(game);
+  },
+  transfer: (item, toChest) => {
+    if (game.transfer(item, toChest)) {
+      ui.renderInventory(game);
+      save(false);
+    }
   },
 });
 const input = new Input({
@@ -131,8 +145,14 @@ function toggleSound() {
   }
   return on;
 }
+const tabId = sessionId();
 function save(manual = false) {
   if (!hasJourney) return true;
+  const lock = heartbeatLock(undefined, tabId);
+  if (lock.foreign) {
+    ui.toast('Tab khác đang chơi hành trình này. Không ghi đè.', 'warning');
+    return false;
+  }
   const data = game.snapshot(),
     result = writeSave(data);
   ui.saved(result.ok);
@@ -148,6 +168,11 @@ function save(manual = false) {
 }
 function startJourney(data = null) {
   if (!ready) return;
+  const lock = claimLock(undefined, tabId);
+  if (lock.foreign) {
+    ui.toast('Hành trình đang mở ở tab khác. Đóng tab kia rồi thử lại.', 'warning');
+    return;
+  }
   game = data ? Game.restore(data) : new Game();
   hasJourney = true;
   renderer.reset();
@@ -216,9 +241,10 @@ function toMenu() {
 }
 function useItem(id) {
   if (!['playing', 'inventory'].includes(mode)) return;
-  if (id === 'berry') game.eat();
+  if (id === 'berry' || id === 'cooked') game.eat(id);
   else if (id === 'torch') game.toggleTorch();
-  else if (id === 'campfire' || id === 'wall') {
+  else if (id === 'home') game.setHome();
+  else if (id === 'campfire' || id === 'wall' || id === 'chest') {
     if (game.placement === id && mode === 'playing') game.placement = null;
     else if (game.beginPlacement(id)) {
       ui.closeDialogs();
@@ -267,9 +293,15 @@ function handleAction(action) {
       const point = mousePoint || game.placementPoint();
       game.place(point.x, point.y);
       handleEvents();
-    } else game.interact();
+    } else {
+      game.interact();
+      if (game.openChest) openInventory('chest');
+    }
   } else if (action === 'eat') useItem('berry');
-  else if (action in ITEMS) useItem(action);
+  else if (action === 'home') {
+    game.setHome();
+    handleEvents();
+  } else if (action in ITEMS) useItem(action);
 }
 function handleEvents() {
   for (const event of game.drainEvents()) {
@@ -297,9 +329,9 @@ function handleEvents() {
   if (count > completedGoals && mode !== 'menu') {
     completedGoals = count;
     ui.toast(
-      count === 5
-        ? 'Những bước đầu đã trọn vẹn. Khu rừng là của bạn.'
-        : `Một bước nhỏ đã hoàn thành · ${count}/5 mục tiêu`,
+      count === 8
+        ? 'Bạn đã có một nơi để trở về. Khu rừng còn rất rộng.'
+        : `Một bước nhỏ đã hoàn thành · ${count}/8 mục tiêu`,
     );
   }
 }
@@ -343,6 +375,37 @@ $('help-button').addEventListener('click', () => {
 $('sound-button').addEventListener('click', toggleSound);
 $('settings-button').addEventListener('click', openSettings);
 $('pause-settings-button').addEventListener('click', openSettings);
+$('export-button').addEventListener('click', () => {
+  if (!hasJourney) return;
+  const blob = new Blob([JSON.stringify(game.snapshot(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'domeo-hanh-trinh.json';
+  link.click();
+  URL.revokeObjectURL(url);
+  ui.toast('Đã xuất bản lưu ra tệp JSON.');
+});
+$('import-file').addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  const parsed = parseImportedSave(await file.text());
+  if (!parsed.data) {
+    ui.toast(parsed.error, 'warning');
+    return;
+  }
+  if (stored.data && stored.data.player.health > 0) {
+    if (!confirm('Nhập bản lưu sẽ thay thế hành trình hiện tại. Tiếp tục?')) return;
+  }
+  const written = writeSave(parsed.data);
+  if (!written.ok) {
+    ui.toast(written.error, 'warning');
+    return;
+  }
+  stored = { data: parsed.data, error: null };
+  startJourney(parsed.data);
+});
 window.addEventListener('blur', () => {
   if (mode === 'playing') pause();
 });
@@ -355,6 +418,7 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', () => {
   if (hasJourney) save(false);
+  releaseLock(undefined, tabId);
 });
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {

@@ -601,6 +601,18 @@ export class Renderer {
       ctx.beginPath();
       ctx.ellipse(x, y - 3, 4, 7, 0, 0, Math.PI * 2);
       ctx.fill();
+    } else if (type === 'chest') {
+      this.shadow(x, y, 22, 9);
+      ctx.fillStyle = '#5c4a32';
+      ctx.fillRect(x - 18, y - 22, 36, 24);
+      ctx.fillStyle = '#8a7048';
+      ctx.fillRect(x - 16, y - 20, 32, 8);
+      ctx.fillStyle = '#c9b27a';
+      ctx.fillRect(x - 16, y - 20, 32, 3);
+      ctx.fillStyle = '#d4c48a';
+      ctx.fillRect(x - 3, y - 14, 6, 8);
+      ctx.fillStyle = '#3d3224';
+      ctx.fillRect(x - 18, y - 12, 36, 2);
     } else if (type === 'wall') {
       this.shadow(x, y, 29, 7);
       ctx.fillStyle = '#66563a';

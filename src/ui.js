@@ -37,7 +37,15 @@ export class UI {
       if (card) {
         this.selectedItem = card.dataset.item;
         this.renderInventory(this.game);
+        if (this.game?.openChest && event.detail === 2) transfer(card.dataset.item, true);
       }
+    });
+    $('chest-grid')?.addEventListener('click', (event) => {
+      const card = event.target.closest('[data-chest]');
+      if (card) transfer(card.dataset.chest, false);
+    });
+    $('stash-selected')?.addEventListener('click', () => {
+      if (this.selectedItem) transfer(this.selectedItem, true);
     });
     $('recipe-list').addEventListener('click', (event) => {
       const button = event.target.closest('[data-craft]');
@@ -52,14 +60,16 @@ export class UI {
       button.addEventListener('keydown', (event) => {
         if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
           event.preventDefault();
+          const tabs = ['bag', 'craft', 'chest'].filter((name) => $(`${name}-tab`));
+          const index = tabs.indexOf(this.tab);
           const tab =
             event.key === 'Home'
-              ? 'bag'
+              ? tabs[0]
               : event.key === 'End'
-                ? 'craft'
-                : this.tab === 'bag'
-                  ? 'craft'
-                  : 'bag';
+                ? tabs.at(-1)
+                : event.key === 'ArrowLeft'
+                  ? tabs[(index - 1 + tabs.length) % tabs.length]
+                  : tabs[(index + 1) % tabs.length];
           selectTab(tab);
           $(`${tab}-tab`).focus();
         }
@@ -183,12 +193,15 @@ export class UI {
   }
   setTab(tab) {
     this.tab = tab;
-    for (const name of ['bag', 'craft']) {
-      $(`${name}-tab`).setAttribute('aria-selected', String(tab === name));
-      $(`${name}-tab`).tabIndex = tab === name ? 0 : -1;
-      $(`${name}-panel`).hidden = tab !== name;
+    for (const name of ['bag', 'craft', 'chest']) {
+      const button = $(`${name}-tab`),
+        panel = $(`${name}-panel`);
+      if (!button || !panel) continue;
+      button.setAttribute('aria-selected', String(tab === name));
+      button.tabIndex = tab === name ? 0 : -1;
+      panel.hidden = tab !== name;
     }
-    if ($('inventory-dialog').open) $(`${tab}-tab`).focus();
+    if ($('inventory-dialog').open) $(`${tab}-tab`)?.focus();
   }
   render(game, target = null) {
     this.game = game;
@@ -221,11 +234,13 @@ export class UI {
       el.classList.toggle('empty', game.inventory[id] === 0);
       const active = game.placement === id || (id === 'torch' && game.torchLit);
       el.classList.toggle('active', active);
-      if (['campfire', 'wall', 'torch'].includes(id))
+      if (['campfire', 'wall', 'chest', 'torch'].includes(id))
         el.setAttribute('aria-pressed', String(active));
     });
-    $('interaction-prompt').hidden = !target || !!game.placement || game.dead;
-    if (target) {
+    const focus = game.getFocus();
+    $('interaction-prompt').hidden = !focus || !!game.placement || game.dead;
+    if (focus?.kind === 'resource') {
+      const target = focus.entity;
       const resource = RESOURCES[target.type],
         missing = resource.tool && !game.inventory[resource.tool];
       $('interaction-label').textContent = missing
@@ -233,7 +248,22 @@ export class UI {
         : resource.label;
       $('interaction-detail').textContent = missing ? 'Nhấn C để chế tạo' : 'Giữ để tiếp tục';
       $('interaction-prompt').classList.toggle('warning', !!missing);
+    } else if (focus?.kind === 'chest') {
+      $('interaction-label').textContent = 'Mở rương gỗ';
+      $('interaction-detail').textContent = 'Cất hoặc lấy đồ';
+      $('interaction-prompt').classList.remove('warning');
+    } else if (focus?.kind === 'campfire') {
+      $('interaction-label').textContent = game.inventory.berry
+        ? 'Nướng quả mọng'
+        : game.home
+          ? 'Lửa nhà bạn'
+          : 'Đánh dấu nhà';
+      $('interaction-detail').textContent = game.inventory.berry
+        ? 'Một quả thành quả nướng'
+        : 'La bàn sẽ nhớ chỗ này';
+      $('interaction-prompt').classList.remove('warning');
     }
+    this.renderWayfinding(game);
     $('placement-bar').hidden = !game.placement;
     if (game.placement)
       $('placement-name').textContent = `Đặt ${ITEMS[game.placement].name.toLowerCase()}`;
@@ -278,16 +308,23 @@ export class UI {
     $('item-detail').innerHTML =
       `<div class="detail-heading"><h3>${item.name}</h3><small>${item.kind}</small></div><p>${item.description}</p>`;
     const action = $('item-action');
-    action.hidden = !['berry', 'campfire', 'wall', 'torch'].includes(this.selectedItem);
+    action.hidden = !['berry', 'cooked', 'campfire', 'wall', 'chest', 'torch'].includes(
+      this.selectedItem,
+    );
     action.disabled = !game.inventory[this.selectedItem];
     action.textContent =
       this.selectedItem === 'berry'
         ? 'Ăn một quả · +25 no'
-        : this.selectedItem === 'torch'
-          ? game.torchLit
-            ? 'Tắt đuốc'
-            : 'Thắp đuốc'
-          : 'Mang ra đặt';
+        : this.selectedItem === 'cooked'
+          ? 'Ăn quả nướng · +40 no'
+          : this.selectedItem === 'torch'
+            ? game.torchLit
+              ? 'Tắt đuốc'
+              : 'Thắp đuốc'
+            : 'Mang ra đặt';
+    this.renderChest(game);
+    const stash = $('stash-selected');
+    if (stash) stash.hidden = !game.openChest;
     for (const recipe of RECIPES) {
       const card = document.querySelector(`[data-recipe="${recipe.id}"]`),
         button = card.querySelector('button');

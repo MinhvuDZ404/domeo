@@ -3,7 +3,7 @@
 - **Ngày lập:** 19/09/2026
 - **Nền tảng:** bản 2.0 hiện có trong workspace
 - **Trạng thái:** đề xuất để triển khai từng đợt; tài liệu này không có nghĩa các tính năng bên dưới đã được làm hoặc phát hành.
-- **Cập nhật 19/09/2026:** bản **3.0.0** đã phát hành như một bản hoàn thiện trải nghiệm, không phải bản gộp của v2.1–v2.5. Xem mục 0 bên dưới.
+- **Cập nhật 21/09/2026:** bản **4.0.0** đã làm một phần v2.1 (chuyển đổi bản lưu, xuất/nhập, khóa tab) và một phần v2.2 (rương, nấu ăn, đánh dấu nhà). Vùng sinh thái, nhiệm vụ dài và chiến đấu vẫn chờ.
 
 ## 0. Bản 3.0 đã làm gì so với lộ trình này
 
