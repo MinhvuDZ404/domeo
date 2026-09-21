@@ -549,6 +549,9 @@ h1 em {
   transform-origin: 50% 50%;
   transition: transform 0.25s ease-out;
 }
+.compass-widget.no-home .compass-needle {
+  opacity: 0.35;
+}
 .compass-widget small {
   font-size: 7px;
   color: #98ad8f;

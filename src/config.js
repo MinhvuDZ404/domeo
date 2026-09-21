@@ -1,4 +1,4 @@
-export const GAME_VERSION = '4.0.0';
+export const GAME_VERSION = '4.0.1';
 export const GAME_LABEL = 'v4.0';
 
 export const DAY_LENGTH = 120;

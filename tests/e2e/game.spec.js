@@ -46,6 +46,7 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await page.keyboard.press('Escape');
   await expect(page.locator('#help-dialog')).toBeHidden();
   await page.locator('#new-button').click();
+  await expect(page.locator('#compass-distance')).toHaveText('Chưa có nhà');
   await page.keyboard.down('KeyD');
   await expect.poll(() => page.locator('#coordinates').textContent()).not.toBe('0, 0');
   await page.keyboard.up('KeyD');
@@ -143,6 +144,83 @@ test('gather, eat, craft every recipe, place a fire and reload the saved world',
   expect(after.world.structures).toEqual(before.world.structures);
   expect(after.world.changes.length).toBe(1);
   expect(after.torchLit).toBe(false);
+});
+
+test('a chest stores items both ways and the world keeps running around it', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  Object.assign(game.player, { x: 0, y: 0, health: 90, hunger: 60 });
+  game.inventory.wood = 6;
+  game.world.structures.push({ id: 'built:0', type: 'chest', x: 30, y: 0 });
+  await restore(page, game.snapshot());
+  await expect(page.locator('#interaction-label')).toHaveText('Mở rương gỗ');
+  await page.keyboard.press('KeyE');
+  await expect(page.locator('#inventory-dialog')).toBeVisible();
+  // The chest panel used to be reachable only through a method that did not exist,
+  // which killed the render loop and froze the whole journey.
+  await expect(page.locator('#chest-tab')).toBeVisible();
+  await expect(page.locator('#chest-panel')).toBeVisible();
+  await expect(page.locator('[data-chest="wood"]')).toBeDisabled();
+  await page.locator('#bag-tab').click();
+  await page.locator('[data-item="wood"]').click();
+  await page.locator('#stash-selected').click();
+  await expect(page.locator('[data-item="wood"] small')).toHaveText('×5');
+  await page.locator('#chest-tab').click();
+  await expect(page.locator('[data-chest="wood"] small')).toHaveText('×1');
+  await page.locator('[data-chest="wood"]').click();
+  await expect(page.locator('[data-chest="wood"] small')).toHaveText('×0');
+  await page.locator('#bag-tab').click();
+  await expect(page.locator('[data-item="wood"] small')).toHaveText('×6');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#inventory-dialog')).toBeHidden();
+  const clock = await page.locator('#clock-label').textContent();
+  await page.waitForTimeout(400);
+  await expect(page.locator('#clock-label')).not.toHaveText(clock);
+  await page.keyboard.down('KeyD');
+  await expect
+    .poll(async () => Number((await page.locator('#coordinates').textContent()).split(',')[0]))
+    .toBeGreaterThan(100);
+  await page.keyboard.up('KeyD');
+  await page.keyboard.press('KeyB');
+  await expect(page.locator('#inventory-dialog')).toBeVisible();
+  await expect(page.locator('#chest-tab')).toBeHidden();
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('the compass and the mini-map follow the marked home', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  Object.assign(game.player, { x: 0, y: 0 });
+  game.home = { x: 0, y: -320 };
+  game.explored.add('1,0');
+  await restore(page, game.snapshot());
+  await expect(page.locator('#compass-distance')).toHaveText('Cách 20 bước');
+  await expect(page.locator('#compass-needle')).toHaveAttribute('data-angle', '0');
+  await expect(page.locator('.compass-widget')).not.toHaveClass(/no-home/);
+  const painted = () =>
+    page.evaluate(() => {
+      const canvas = document.getElementById('mini-map');
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      const colors = new Set();
+      for (let i = 0; i < data.length; i += 4)
+        colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+      return colors.size;
+    });
+  await expect.poll(painted).toBeGreaterThan(2);
+  const steps = async () =>
+    Number(/(\d+)/.exec(await page.locator('#compass-distance').textContent())?.[1] ?? 0);
+  await page.keyboard.down('KeyD');
+  await expect.poll(() => page.locator('#compass-needle').getAttribute('data-angle')).not.toBe('0');
+  await expect
+    .poll(async () => Number((await page.locator('#coordinates').textContent()).split(',')[0]))
+    .toBeGreaterThan(150);
+  await page.keyboard.up('KeyD');
+  expect(Number(await page.locator('#compass-needle').getAttribute('data-angle'))).toBeLessThan(0);
+  expect(await steps()).toBeGreaterThanOrEqual(21);
+  expect(errors).toEqual([]);
 });
 
 test('a depleted bush regrows through the day-clock boundary in the real game loop', async ({

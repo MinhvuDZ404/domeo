@@ -1,6 +1,6 @@
 {
   "name": "domeo",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "private": true,
   "type": "module",
   "description": "A small, offline-friendly woodland survival game built with HTML5 Canvas.",
