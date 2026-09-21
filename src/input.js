@@ -18,6 +18,8 @@ const actions = {
   Digit4: 'campfire',
   Digit5: 'torch',
   Digit6: 'wall',
+  Digit7: 'chest',
+  KeyH: 'home',
   KeyM: 'mute',
   KeyO: 'options',
   Escape: 'escape',

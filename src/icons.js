@@ -22,6 +22,8 @@ const paths = {
   fire: '<path d="M13 2c3 7-2 7 2 10 1-1 2-3 2-4 7 8 2 13-5 13S1 14 8 8c0 3 1 4 2 4 3-2-1-5 3-10Z"/><path d="M10 20c-3-3 0-5 2-7 0 3 4 3 2 7"/>',
   torch: '<path d="m10 14 1 8h2l1-8M8 13h8M12 2c5 5-1 4 3 7 4-2 2 4-3 4S6 8 10 6c-1 3 3 3 2-4Z"/>',
   wall: '<path d="M4 21V5l2-3 2 3v16M16 21V5l2-3 2 3v16M8 9h8M8 16h8M2 9h2m16 0h2M2 16h2m16 0h2"/>',
+  chest:
+    '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 13h18M12 8v13M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5Z"/>',
   save: '<path d="M4 3h13l4 4v14H3V3h1ZM7 3v6h9V3M7 21v-8h10v8"/>',
   volume: '<path d="m12 3-7 5H2v8h3l7 5ZM16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',

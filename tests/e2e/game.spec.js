@@ -38,8 +38,8 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await ready(page);
   await expect(page).toHaveTitle('Domeo — Một chuyến đi hoang dã');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Đi lạc một chút.');
-  await expect(page.locator('#edition-label')).toContainText('v3.0');
-  await expect(page.locator('#edition-label i')).toHaveText('v3.0');
+  await expect(page.locator('#edition-label')).toContainText('v4.0');
+  await expect(page.locator('#edition-label i')).toHaveText('v4.0');
   await expect(page.locator('#continue-button')).toBeHidden();
   await page.locator('#help-button').click();
   await expect(page.locator('#help-dialog')).toBeVisible();
@@ -98,7 +98,7 @@ test('gather, eat, craft every recipe, place a fire and reload the saved world',
 }) => {
   const game = new Game(404);
   Object.assign(game.player, { x: -75, y: -45, health: 80, hunger: 50 });
-  Object.assign(game.inventory, { wood: 30, stone: 30, fiber: 2 });
+  Object.assign(game.inventory, { wood: 40, stone: 30, fiber: 6 });
   await restore(page, game.snapshot());
   await expect(page.locator('#interaction-label')).toHaveText('Hái quả mọng');
   await page.keyboard.press('KeyE');
@@ -107,14 +107,14 @@ test('gather, eat, craft every recipe, place a fire and reload the saved world',
   await expect(page.locator('[data-count="berry"]')).toHaveText('3');
   await expect(page.locator('#hunger-bar')).toHaveAttribute('aria-valuenow', '75');
   await page.keyboard.press('KeyC');
-  for (const id of ['axe', 'pickaxe', 'campfire', 'torch', 'wall']) {
+  for (const id of ['axe', 'pickaxe', 'campfire', 'torch', 'wall', 'chest']) {
     await expect(page.locator(`[data-craft="${id}"]`)).toBeEnabled();
     await page.locator(`[data-craft="${id}"]`).click();
   }
   await expect(page.locator('[data-craft="axe"]')).toHaveText('Đã có');
   await expect(page.locator('[data-craft="axe"]')).toBeDisabled();
   await page.locator('#bag-tab').click();
-  await expect(page.locator('[data-item="wood"] small')).toHaveText('×10');
+  await expect(page.locator('[data-item="wood"] small')).toHaveText('×14');
   await expect(page.locator('[data-item="stone"] small')).toHaveText('×20');
   await page.keyboard.press('Escape');
   await page.keyboard.press('Digit4');

@@ -1,5 +1,5 @@
-export const GAME_VERSION = '3.0.0';
-export const GAME_LABEL = 'v3.0';
+export const GAME_VERSION = '4.0.0';
+export const GAME_LABEL = 'v4.0';
 
 export const DAY_LENGTH = 120;
 export const DAY_OFFSET = DAY_LENGTH * 0.2;
@@ -9,9 +9,12 @@ export const PLAYER_SPEED = 170;
 export const INTERACTION_DISTANCE = 68;
 export const MAX_STACK = 999;
 export const MAX_STRUCTURES = 100;
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'domeo.journey.v1';
+export const LOCK_KEY = 'domeo.lock.v1';
+export const WORLD_GEN_VERSION = 1;
 export const WORLD_LIMIT = 1_000_000;
+export const MAX_EXPLORED = 2500;
 
 // Survival tuning. These numbers are the dials used by the balance report in
 // docs/BALANCE.md; changing one changes how long a journey takes, so the
@@ -23,6 +26,22 @@ export const CAMPFIRE_HEAL_RADIUS = 100;
 export const FIRE_MIN_HUNGER = 20;
 export const BERRY_HUNGER = 25;
 export const BERRY_HEALTH = 3;
+export const COOKED_HUNGER = 40;
+export const COOKED_HEALTH = 12;
+
+export const UNIQUE_ITEMS = ['axe', 'pickaxe', 'torch'];
+export const PLACEABLE = ['campfire', 'wall', 'chest'];
+export const STAT_KEYS = [
+  'berries',
+  'wood',
+  'stone',
+  'crafted',
+  'campfires',
+  'distance',
+  'cooked',
+  'chests',
+  'explored',
+];
 
 export const ITEMS = {
   berry: {
@@ -30,6 +49,12 @@ export const ITEMS = {
     icon: 'berry',
     kind: 'Thức ăn',
     description: 'Một chút ngọt lành từ rừng. Ăn để hồi 25 no và 3 máu.',
+  },
+  cooked: {
+    name: 'Quả nướng',
+    icon: 'bowl',
+    kind: 'Thức ăn',
+    description: 'Nướng bên lửa trại. Ăn để hồi 40 no và 12 máu.',
   },
   wood: {
     name: 'Gỗ',
@@ -65,7 +90,7 @@ export const ITEMS = {
     name: 'Lửa trại',
     icon: 'fire',
     kind: 'Công trình',
-    description: 'Đặt xuống đất để soi sáng. Đứng gần lửa khi đủ no để hồi máu.',
+    description: 'Đặt xuống đất để soi sáng, nướng quả và đánh dấu nhà.',
   },
   torch: {
     name: 'Đuốc',
@@ -79,6 +104,12 @@ export const ITEMS = {
     kind: 'Công trình',
     description: 'Đánh dấu nơi dừng chân bằng một hàng rào gỗ nhỏ.',
   },
+  chest: {
+    name: 'Rương gỗ',
+    icon: 'chest',
+    kind: 'Công trình',
+    description: 'Cất đồ khi túi đầy. Đứng gần và nhấn E để mở.',
+  },
 };
 
 export const RECIPES = [
@@ -87,6 +118,7 @@ export const RECIPES = [
   { id: 'campfire', costs: { wood: 6, stone: 4 } },
   { id: 'torch', costs: { wood: 3, fiber: 2 }, unique: true },
   { id: 'wall', costs: { wood: 4 } },
+  { id: 'chest', costs: { wood: 6, fiber: 2 } },
 ];
 
 export const RESOURCES = {
@@ -96,6 +128,9 @@ export const RESOURCES = {
   tree: { charges: 3, respawn: 120, label: 'Chặt cây', tool: 'axe', icon: 'axe' },
   rock: { charges: 3, respawn: 90, label: 'Khai thác đá', tool: 'pickaxe', icon: 'pickaxe' },
 };
+
+export const emptyItems = () => Object.fromEntries(Object.keys(ITEMS).map((key) => [key, 0]));
+export const emptyStats = () => Object.fromEntries(STAT_KEYS.map((key) => [key, 0]));
 
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 export function getDayInfo(elapsed) {

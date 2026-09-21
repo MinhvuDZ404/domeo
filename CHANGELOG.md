@@ -3,6 +3,32 @@
 Mọi thay đổi đáng chú ý của Domeo được ghi ở đây. Game hiển thị phiên bản trong mục **Cài đặt**
 (phím `O`, phần cuối hộp thoại) và ở `src/config.js`.
 
+## 4.0.0 — 21/09/2026
+
+Bản **Một nơi để trở về**: vòng chơi có căn cứ thật, la bàn, và bản lưu được nâng cấp an toàn.
+
+### Bản lưu
+
+- Cấu trúc bản lưu lên phiên bản 2. Hành trình 2.0/3.0 (schema 1) được **chuyển đổi** khi đọc,
+  không mất vị trí, túi đồ hay công trình; thuật toán sinh thế giới vẫn là phiên bản 1.
+- **Xuất / nhập** tệp JSON từ màn hình tạm dừng. Tệp hỏng hoặc quá lớn không ghi đè bản đang chơi.
+- Khóa tab: tab khác mở cùng hành trình sẽ không âm thầm ghi đè tiến trình mới hơn.
+
+### Căn cứ
+
+- **Rương gỗ** (6 gỗ + 2 sợi): đặt xuống, đứng gần nhấn E, cất hoặc lấy từng món.
+- **Nướng quả** bên lửa trại (E khi còn quả mọng): quả nướng hồi 40 no và 12 máu.
+- **Đánh dấu nhà** gần lửa (E khi hết quả, hoặc phím H). La bàn trên HUD chỉ hướng về nhà.
+- Bản đồ nhỏ ghi các chunk đã khám phá, không lưu nguyên thế giới.
+
+### Mục tiêu
+
+- Nhật ký mở rộng thành 8 bước, kết thúc bằng một nơi để trở về rồi sống qua một chu kỳ.
+
+### Tương thích
+
+- Sprite, seed và tài nguyên thế giới không đổi so với 3.0. Chỉ thêm dữ liệu mới trên bản lưu v2.
+
 ## 3.0.0 — 19/09/2026
 
 Bản này hoàn thiện trải nghiệm của vòng chơi hiện có (khám phá, hái lượm, chế tạo, dựng chỗ dừng

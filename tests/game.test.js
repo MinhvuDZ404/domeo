@@ -214,6 +214,31 @@ test('a new run resets inventory, goals, resources, structures and survival stat
   );
 });
 
+test('cooking a berry at a campfire yields cooked food', () => {
+  const game = new Game(1);
+  game.world.structures.push({ id: 'built:0', type: 'campfire', x: 0, y: 0 });
+  Object.assign(game.player, { x: 10, y: 10 });
+  assert.equal(game.cook(), true);
+  assert.equal(game.inventory.berry, 2);
+  assert.equal(game.inventory.cooked, 1);
+  Object.assign(game.player, { hunger: 40, health: 40 });
+  assert.equal(game.eat('cooked'), true);
+  assert.equal(game.inventory.cooked, 0);
+});
+
+test('chest transfer moves one item without duplicating it', () => {
+  const game = new Game(1);
+  game.world.structures.push({ id: 'built:0', type: 'chest', x: 0, y: 0 });
+  game.openChest = true;
+  game.inventory.wood = 4;
+  assert.equal(game.transfer('wood', true), true);
+  assert.equal(game.inventory.wood, 3);
+  assert.equal(game.chest.wood, 1);
+  assert.equal(game.transfer('wood', false), true);
+  assert.equal(game.inventory.wood, 4);
+  assert.equal(game.chest.wood, 0);
+});
+
 test('a refused action emits exactly one deny event and never a fake reward', () => {
   const game = new Game(1);
   Object.assign(game.player, { x: 180, y: 50 });

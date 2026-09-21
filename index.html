@@ -121,7 +121,8 @@
             ><span><kbd>B</kbd> Túi đồ</span>
           </div>
           <span id="edition-label" class="edition"
-            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v3.0</i></span
+            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v4.0</i></span
+          >
           >
         </footer>
       </section>
@@ -170,11 +171,29 @@
             <span data-icon="pin" data-size="13"></span> Rừng tĩnh lặng
             <span id="coordinates">0, 0</span>
           </div>
+          <div class="wayfinding" aria-label="La bàn và bản đồ">
+            <div class="compass-widget">
+              <span
+                id="compass-needle"
+                class="compass-needle"
+                data-icon="compass"
+                data-size="22"
+              ></span>
+              <small id="compass-distance">Chưa có nhà</small>
+            </div>
+            <canvas
+              id="mini-map"
+              class="mini-map"
+              width="96"
+              height="96"
+              aria-label="Bản đồ đã khám phá"
+            ></canvas>
+          </div>
         </div>
         <aside class="journal-card glass-panel" aria-label="Mục tiêu khởi đầu">
           <button id="journal-toggle" class="journal-heading" aria-expanded="true">
-            <span><span data-icon="leaf" data-size="17"></span> BƯỚC CHÂN ĐẦU TIÊN</span
-            ><small id="goal-count">0/5</small>
+            <span><span data-icon="leaf" data-size="17"></span> MỘT NƠI ĐỂ TRỞ VỀ</span
+            ><small id="goal-count">0/8</small>
           </button>
           <ol id="goal-list"></ol>
           <div class="journal-footer">Mỗi điều nhỏ bé, một khởi đầu.</div>
@@ -253,6 +272,16 @@
               ><span class="slot-count" data-count="wall">0</span
               ><span class="slot-name">Hàng rào</span>
             </button>
+            <button
+              class="hotbar-slot"
+              data-slot="chest"
+              aria-label="Đặt rương (7)"
+              title="Đặt rương gỗ (7)"
+            >
+              <kbd>7</kbd><span data-icon="chest" data-size="29"></span
+              ><span class="slot-count" data-count="chest">0</span
+              ><span class="slot-name">Rương</span>
+            </button>
             <span class="hotbar-divider"></span>
             <button
               id="inventory-button"
@@ -328,12 +357,38 @@
         >
           <span data-icon="hammer" data-size="18"></span> Chế tạo
         </button>
+        <button
+          id="chest-tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="chest-panel"
+          tabindex="-1"
+          data-tab="chest"
+          hidden
+        >
+          <span data-icon="chest" data-size="18"></span> Rương
+        </button>
       </div>
       <section id="bag-panel" class="inventory-panel" role="tabpanel" aria-labelledby="bag-tab">
         <p class="section-note">Những điều bạn nhặt được trên đường.</p>
         <div id="inventory-grid" class="inventory-grid"></div>
         <div id="item-detail" class="item-detail"></div>
         <button id="item-action" class="button button-dark item-action" hidden>Sử dụng</button>
+        <button id="stash-selected" class="button button-outline item-action" hidden>
+          Cất vào rương
+        </button>
+      </section>
+      <section
+        id="chest-panel"
+        class="inventory-panel"
+        role="tabpanel"
+        aria-labelledby="chest-tab"
+        hidden
+      >
+        <p class="section-note">
+          Nhấp một món trong rương để lấy ra. Nhấp đúp món trong túi để cất.
+        </p>
+        <div id="chest-grid" class="inventory-grid"></div>
       </section>
       <section
         id="craft-panel"
@@ -362,6 +417,11 @@
           <span data-icon="save" data-size="18"></span> Lưu hành trình</button
         ><button id="pause-settings-button" class="button button-outline">
           <span data-icon="gear" data-size="18"></span> Cài đặt</button
+        ><button id="export-button" class="button button-outline">
+          <span data-icon="save" data-size="18"></span> Xuất tiến trình</button
+        ><label class="button button-outline import-label">
+          Nhập tiến trình
+          <input id="import-file" type="file" accept="application/json,.json" hidden /> </label
         ><button id="home-button" class="text-button">
           Về màn hình chính <span data-icon="arrow" data-size="16"></span>
         </button>
@@ -417,7 +477,7 @@
       <button class="button button-dark" data-close>
         Mình sẵn sàng rồi <span data-icon="arrow" data-size="18"></span>
       </button>
-      <small id="game-version" class="dialog-footnote">Domeo v3.0</small>
+      <small id="game-version" class="dialog-footnote">Domeo v4.0</small>
     </dialog>
 
     <dialog

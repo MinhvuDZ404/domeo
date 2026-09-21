@@ -4,6 +4,13 @@ Game sinh tồn 2D góc nhìn từ trên xuống, viết bằng **JavaScript thu
 
 Trang GitHub Pages của dự án: <https://minhvudz404.github.io/domeo/>. Các thay đổi mới chỉ xuất hiện trên trang này sau khi nhánh dùng để triển khai được cập nhật.
 
+## Có gì trong bản 4.0?
+
+Bản 4.0 cho bạn **một nơi để trở về**: rương, nướng ăn, la bàn về nhà, bản đồ đã khám phá, và nâng
+cấp bản lưu từ 2.0/3.0 mà không mất thế giới. Chi tiết trong `CHANGELOG.md`.
+
+### Nền tảng từ 3.0
+
 ## Có gì trong bản 3.0?
 
 Bản 3.0 **hoàn thiện trải nghiệm** của vòng chơi hiện có (khám phá, hái lượm, chế tạo, dựng chỗ dừng
@@ -83,6 +90,7 @@ Trên điện thoại, dùng joystick ở góc trái, các nút cảm ứng và 
 | Lửa trại | 6 gỗ + 4 đá  | Soi sáng, hồi máu khi đủ no và đứng gần        |
 | Đuốc     | 3 gỗ + 2 sợi | Nguồn sáng mang theo nhân vật                  |
 | Hàng rào | 4 gỗ         | Công trình có va chạm để đánh dấu nơi trú chân |
+| Rương gỗ | 6 gỗ + 2 sợi | Cất đồ; đứng gần nhấn E để mở                  |
 
 Rìu, cuốc và đuốc chỉ cần chế tạo một lần. Mỗi loại vật phẩm tối đa 999 đơn vị; mỗi thế giới tối đa 100 công trình.
 
