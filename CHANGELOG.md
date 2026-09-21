@@ -1,3 +1,13 @@
+# Changelog
+
+## 5.1.0 — Final Evolution
+
+- Thêm combat nhẹ, telegraph, i-frame, loot và bốn archetype kẻ địch code-rendered.
+- Thêm hành trình 8 quest stable-ID với reward một lần, mục tiêu hải đăng và culmination Hộ Vệ Cổ.
+- Thêm trại 3 cấp, bàn thợ, vũ khí tinh luyện, vùng an toàn và compass tín hiệu.
+- Save schema 4 migration từ 5.0, giữ nguyên world generation cũ.
+- Thêm kiểm thử combat/progression/camp/migration và giới hạn simulation.
+
 # Nhật ký thay đổi
 
 Mọi thay đổi đáng chú ý của Domeo được ghi ở đây. Game hiển thị phiên bản trong mục **Cài đặt**

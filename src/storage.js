@@ -14,6 +14,7 @@ import {
   emptyItems,
   emptyStats,
 } from './config.js';
+import { QUESTS } from './progression.js';
 
 const number = (n, min = 0, max = Number.MAX_SAFE_INTEGER) =>
   typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
@@ -66,6 +67,19 @@ export function migrateSave(data) {
       },
     };
   }
+  // v3 (Domeo 5.0): add only bounded 5.1 progression state. Terrain and
+  // generationVersion are intentionally untouched, so old worlds remain exact.
+  if (current.version === 3) {
+    current = {
+      ...current,
+      version: 4,
+      inventory: { ...emptyItems(), ...current.inventory },
+      chest: { ...emptyItems(), ...current.chest },
+      camp: { level: 1 },
+      progression: { completed: [], claimed: [], fragmentsFound: 0, guardianDefeated: false },
+      combat: { kills: 0, defeated: [] },
+    };
+  }
   return current.version === SAVE_VERSION ? current : null;
 }
 
@@ -105,6 +119,49 @@ export function validateSave(data) {
       return false;
   }
   if (!validInventory(save.chest ?? emptyItems())) return false;
+  if (!object(save.camp) || !integer(save.camp.level, 1, 3)) return false;
+  const questIds = new Set(QUESTS.map((q) => q.id));
+  if (
+    !object(save.progression) ||
+    !Array.isArray(save.progression.completed) ||
+    !Array.isArray(save.progression.claimed)
+  )
+    return false;
+  if (
+    save.progression.completed.length > QUESTS.length ||
+    save.progression.claimed.length > QUESTS.length
+  )
+    return false;
+  if (
+    ![...save.progression.completed, ...save.progression.claimed].every(
+      (id) => typeof id === 'string' && questIds.has(id),
+    ) ||
+    new Set(save.progression.completed).size !== save.progression.completed.length ||
+    new Set(save.progression.claimed).size !== save.progression.claimed.length ||
+    save.progression.claimed.some((id) => !save.progression.completed.includes(id)) ||
+    save.progression.completed.some((id, index) => id !== QUESTS[index]?.id)
+  )
+    return false;
+  if (
+    !integer(save.progression.fragmentsFound, 0, 999) ||
+    typeof save.progression.guardianDefeated !== 'boolean'
+  )
+    return false;
+  if (
+    !object(save.combat) ||
+    !integer(save.combat.kills, 0, 100000) ||
+    !Array.isArray(save.combat.defeated) ||
+    save.combat.defeated.length > 80
+  )
+    return false;
+  for (const record of save.combat.defeated)
+    if (
+      !object(record) ||
+      typeof record.id !== 'string' ||
+      !/^enemy:(ancient|-?\d{1,6},-?\d{1,6})$/.test(record.id) ||
+      !number(record.until, 0)
+    )
+      return false;
   if (!Array.isArray(save.explored) || save.explored.length > MAX_EXPLORED) return false;
   for (const key of save.explored) {
     if (typeof key !== 'string' || !/^-?\d{1,5},-?\d{1,5}$/.test(key)) return false;

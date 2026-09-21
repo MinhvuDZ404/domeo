@@ -1,4 +1,4 @@
-# Cân bằng Domeo 5.0
+# Cân bằng Domeo 5.1
 
 Tài liệu này ghi lại cách đo nhịp chơi và những con số đo được, để lần sau chỉnh cân bằng có
 căn cứ thay vì cảm tính. Số liệu do `scripts/balance.mjs` sinh ra từ **chính logic game thật**
@@ -106,3 +106,14 @@ Số liệu này dùng chung hằng số với game thật (`src/config.js`), n�
    cạnh lửa trại và lượng no của một quả mọng, nên đổi hằng số thì phải cập nhật kỳ vọng kèm giải
    thích.
 4. Cập nhật lại tài liệu này bằng `npm run balance -- --write`.
+
+## Kịch bản 5.1 cần đọc cùng số liệu trên
+
+- **Newcomer:** khu vực gần nhà không spawn enemy; combat chỉ bắt đầu sau khi có lửa/nhà và đi khỏi safe radius.
+- **Explorer / Survivor:** có thể chạy khỏi enemy; enemy despawn ngoài vùng mô phỏng và quest không yêu cầu farm số lượng lớn.
+- **Fighter:** Stalker 34 HP, Guardian 72 HP, Wisp 24 HP; rìu gây 15 và lưỡi tinh luyện gây 24 damage. Mọi đòn enemy có wind-up 0,45–1,05 giây và player có i-frame 0,8 giây.
+- **Builder:** trại cấp 2 cần 10 gỗ, 6 đá, 3 sợi; cấp 3 cần 16 gỗ, 10 đá, 3 tinh thể và 3 mảnh hộ vệ.
+- **Night traveler:** mật độ candidate tăng từ 18% lên 34%, có Wisp nhanh nhưng mỏng; camp safe radius không đổi theo thời gian.
+- **Long expedition:** hunger vẫn dùng đồng hồ 24 phút hiện hữu; combat không tạo drain nền mới.
+
+Các con số combat hiện có unit test và bounded simulation, nhưng chưa có bot 5.1 tự chơi trọn chuỗi hải đăng. Cần manual playtest trước release để tinh chỉnh spawn/healing; không suy diễn bảng bot 5.0 thành bằng chứng endgame đã cân bằng hoàn hảo.

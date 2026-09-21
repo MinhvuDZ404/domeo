@@ -15,6 +15,7 @@ export class UI {
     useItem,
     selectTab,
     transfer = () => {},
+    upgradeCamp = () => {},
     setting = () => {},
     resetSettings = () => {},
   }) {
@@ -85,6 +86,11 @@ export class UI {
           $(`${tab}-tab`).focus();
         }
       });
+    });
+    $('camp-button')?.addEventListener('click', () => action('camp'));
+    $('camp-upgrade')?.addEventListener('click', () => {
+      upgradeCamp();
+      if (this.game) this.openCamp(this.game);
     });
     $('journal-toggle').addEventListener('click', () => {
       const collapsed = document.querySelector('.journal-card').classList.toggle('collapsed');
@@ -300,30 +306,18 @@ export class UI {
     $('touch-interact').querySelector('small').textContent = game.placement
       ? 'ĐẶT XUỐNG'
       : 'HÁI LƯỢM';
-    const goals = game.goals(),
-      count = goals.filter((goal) => goal.done).length;
-    const signature = goals.map((goal) => Number(goal.done)).join('');
+    const quest = game.currentQuest();
+    const count = game.progression.completed.length;
+    const signature = `${quest.id}:${quest.progress}:${count}`;
     if (signature !== this.lastGoalSignature) {
       this.lastGoalSignature = signature;
-      $('goal-count').textContent = `${count}/${goals.length}`;
-      // Keep the journal compact: previous step, current step, then the next step.
-      const current = goals.findIndex((goal) => !goal.done);
-      const start =
-        current < 0 ? goals.length - 3 : Math.max(0, Math.min(current - 1, goals.length - 3));
-      $('goal-list').innerHTML = goals
-        .slice(start, start + 3)
-        .map(
-          (goal, index) =>
-            `<li class="goal ${goal.done ? 'done' : start + index === current ? 'active' : ''}"><span class="goal-dot">${goal.done ? icon('check', 11) : ''}</span><div><strong>${goal.label}</strong><small>${goal.hint}</small></div></li>`,
-        )
-        .join('');
+      $('goal-count').textContent = `${count}/8`;
+      $('goal-list').innerHTML =
+        `<li class="goal active"><span class="goal-dot">${quest.done ? icon('check', 11) : ''}</span><div><strong>${quest.title}</strong><small>${quest.description}<br>${quest.progress}</small></div></li>`;
     }
     const footer = $('journal-footer');
     if (footer) {
-      const text =
-        game.stats.landmarks > 0
-          ? `Đã khám phá ${game.stats.landmarks} địa danh · Mỗi điều nhỏ bé, một khởi đầu.`
-          : 'Mỗi điều nhỏ bé, một khởi đầu.';
+      const text = `Trại cấp ${game.camp.level} · ${game.combat.kills} hiểm nguy đã vượt qua · ${game.stats.landmarks} địa danh`;
       if (footer.textContent !== text) footer.textContent = text;
     }
     if ($('inventory-dialog').open) this.renderInventory(game);
@@ -345,9 +339,11 @@ export class UI {
     if (label) {
       const text = !compass
         ? 'Chưa có nhà'
-        : compass.distance < 40
-          ? 'Bạn đang ở nhà'
-          : `Cách ${Math.max(1, Math.round(compass.distance / 16))} bước`;
+        : compass.label === 'guardian'
+          ? `Tín hiệu · ${Math.max(1, Math.round(compass.distance / 16))} bước`
+          : compass.distance < 40
+            ? 'Bạn đang ở nhà'
+            : `Cách ${Math.max(1, Math.round(compass.distance / 16))} bước`;
       if (label.textContent !== text) label.textContent = text;
     }
     this.renderMiniMap(game);
@@ -440,6 +436,28 @@ export class UI {
       card.disabled = count === 0;
       card.setAttribute('aria-label', `${ITEMS[id].name}, ${count}`);
     }
+  }
+  openCamp(game) {
+    this.game = game;
+    const info = game.campUpgradeInfo();
+    const details = $('camp-details');
+    const next = info.next;
+    details.innerHTML = `<h3>Cấp ${info.current.level} · ${info.current.name}</h3><p>${info.current.benefit}</p>${
+      next
+        ? `<hr><h3>Tiếp theo · ${next.name}</h3><p>${next.benefit}</p><div class="camp-costs">${Object.entries(
+            next.costs,
+          )
+            .map(
+              ([id, count]) =>
+                `<span class="${game.inventory[id] < count ? 'missing' : ''}">${ITEMS[id].name}: ${game.inventory[id]}/${count}</span>`,
+            )
+            .join('')}</div>`
+        : '<p><strong>Hải đăng đã sáng.</strong> Bạn vẫn có thể tiếp tục khám phá và hoàn thiện hành trình.</p>'
+    }`;
+    const button = $('camp-upgrade');
+    button.hidden = !next;
+    button.disabled = !game.canUpgradeCamp();
+    this.openDialog('camp-dialog');
   }
   renderInventory(game) {
     if (!game) return;
