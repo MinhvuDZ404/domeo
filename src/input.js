@@ -19,6 +19,8 @@ const actions = {
   Digit5: 'torch',
   Digit6: 'wall',
   Digit7: 'chest',
+  Digit8: 'lantern',
+  KeyG: 'salve',
   KeyH: 'home',
   KeyM: 'mute',
   KeyO: 'options',

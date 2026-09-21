@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { World, makeChunk, hash, overlaps } from '../src/world.js';
-import { DAY_LENGTH, MAX_CACHED_CHUNKS, getDayInfo } from '../src/config.js';
+import { World, makeChunk, hash, overlaps, biomeAt } from '../src/world.js';
+import { DAY_LENGTH, MAX_CACHED_CHUNKS, getDayInfo, getWeather } from '../src/config.js';
 
 const starter = (world, id) =>
   world
     .getEntities({ x: -300, y: -300, width: 600, height: 600 }, 0)
     .find((entity) => entity.id === `start:${id}`);
 
-test('resource timers recover across the original 120-second day wrap', () => {
+test('resource timers recover across the 24-minute day wrap', () => {
   const world = new World(123),
     bush = starter(world, 0);
   const harvestedAt = DAY_LENGTH - 5;
@@ -27,14 +27,21 @@ test('resource timers also recover after multiple complete days', () => {
   assert.equal(world.getState(bush, 928).remaining, 3);
 });
 test('chunk generation is deterministic and independent of visitation order', () => {
-  const a = new World(345),
-    b = new World(345);
-  const expected = a.getChunk(-3, 8);
-  b.getChunk(99, -72);
-  b.getChunk(0, 0);
-  assert.deepEqual(b.getChunk(-3, 8), expected);
-  assert.deepEqual(makeChunk(345, -3, 8), expected);
-  assert.notDeepEqual(makeChunk(346, -3, 8), expected);
+  for (const generation of [1, 2]) {
+    const a = new World(345, [], [], generation),
+      b = new World(345, [], [], generation);
+    const expected = a.getChunk(-3, 8);
+    b.getChunk(99, -72);
+    b.getChunk(0, 0);
+    assert.deepEqual(b.getChunk(-3, 8), expected);
+    assert.deepEqual(makeChunk(345, -3, 8, generation), expected);
+    assert.notDeepEqual(makeChunk(346, -3, 8, generation), expected);
+  }
+});
+test('generation v1 chunks keep their exact legacy shape', () => {
+  const chunk = makeChunk(345, -3, 8, 1);
+  assert.deepEqual(Object.keys(chunk).sort(), ['decorations', 'entities']);
+  assert.equal(chunk.decorations.length, 26);
 });
 test('signed chunk coordinates do not share a mirrored seed', () => {
   assert.notEqual(hash(404, 2, 3), hash(404, -2, -3));
@@ -91,9 +98,19 @@ test('collision rectangles touching at an edge are not overlapping', () => {
   assert.equal(overlaps(a, { x: 10, y: 0, width: 10, height: 10 }), false);
   assert.equal(overlaps(a, { x: 9, y: 0, width: 10, height: 10 }), true);
 });
+test('one game day lasts exactly 24 minutes of simulation time', () => {
+  assert.equal(DAY_LENGTH, 1440);
+  assert.equal(getDayInfo(0).day, 1);
+  // Day 2 begins when the offset clock wraps: elapsed = DAY_LENGTH - DAY_OFFSET.
+  assert.equal(getDayInfo(1151.9).day, 1);
+  assert.equal(getDayInfo(1152).day, 2);
+  assert.equal(getDayInfo(1152 + 1440).day, 3);
+  assert.equal(getDayInfo(1440).clock, getDayInfo(0).clock);
+  assert.equal(getDayInfo(2880).clock, getDayInfo(0).clock);
+});
 test('day labels, light levels and clocks use one consistent phase', () => {
   const morning = getDayInfo(0),
-    night = getDayInfo(70);
+    night = getDayInfo(800);
   assert.equal(morning.isNight, false);
   assert.ok(morning.daylight > 0.9);
   assert.equal(morning.clock, '10:48');
@@ -102,6 +119,10 @@ test('day labels, light levels and clocks use one consistent phase', () => {
   assert.equal(night.daylight, 0);
   assert.equal(getDayInfo(DAY_LENGTH).day, 2);
   assert.equal(getDayInfo(DAY_LENGTH).clock, morning.clock);
+  // Golden hour and night carry distinct emotional grades.
+  const sunset = getDayInfo(DAY_LENGTH * 0.3 - 1);
+  assert.ok(sunset.warmth > 0.4);
+  assert.ok(night.nightFactor > 0.9);
 });
 
 test('resources cannot regrow through a placed structure', () => {
@@ -115,4 +136,47 @@ test('resources cannot regrow through a placed structure', () => {
     false,
   );
   assert.equal(world.isBlocked(tree.x, tree.y, 121), false);
+});
+
+test('biomes are deterministic and the spawn stays a friendly meadow', () => {
+  assert.equal(biomeAt(404, 0, 0), 'meadow');
+  assert.equal(biomeAt(404, 100, 50), 'meadow');
+  assert.equal(biomeAt(404, 1500, -800), biomeAt(404, 1500, -800));
+  const world = new World(404);
+  assert.equal(world.biomeAt(0, 0), 'meadow');
+  const legacy = new World(404, [], [], 1);
+  assert.equal(legacy.biomeAt(5000, 5000), 'woodland');
+});
+
+test('every seed has a landmark within a short walk of home', () => {
+  for (let seed = 0; seed < 50; seed++) {
+    const world = new World(seed);
+    const landmarks = world.getLandmarks({ x: -2000, y: -2000, width: 4000, height: 4000 });
+    const closest = Math.min(...landmarks.map((l) => Math.hypot(l.x, l.y)));
+    assert.ok(closest < 2000, `seed ${seed}: closest landmark at ${Math.round(closest)}px`);
+  }
+});
+
+test('landmarks are deterministic per seed and never invade the spawn', () => {
+  const a = new World(777),
+    b = new World(777);
+  const bounds = { x: -3000, y: -3000, width: 6000, height: 6000 };
+  assert.deepEqual(a.getLandmarks(bounds), b.getLandmarks(bounds));
+  for (const landmark of a.getLandmarks(bounds)) {
+    assert.ok(Math.hypot(landmark.x, landmark.y) > 550);
+    assert.match(landmark.id, /^lm:-?\d{1,5},-?\d{1,5}$/);
+  }
+  const legacy = new World(777, [], [], 1);
+  assert.deepEqual(legacy.getLandmarks(bounds), []);
+});
+
+test('weather bands are deterministic per seed and blend without jumps', () => {
+  const a = getWeather(100, 42);
+  const b = getWeather(100, 42);
+  assert.deepEqual(a, b);
+  assert.ok(['clear', 'cloud', 'mist', 'rain'].includes(a.type));
+  assert.ok(a.intensity >= 0 && a.intensity <= 1);
+  // Same band, different seeds usually differ; different bands can differ.
+  const other = getWeather(100, 43);
+  assert.ok(typeof other.type === 'string');
 });

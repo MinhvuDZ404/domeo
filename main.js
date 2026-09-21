@@ -241,10 +241,10 @@ function toMenu() {
 }
 function useItem(id) {
   if (!['playing', 'inventory'].includes(mode)) return;
-  if (id === 'berry' || id === 'cooked') game.eat(id);
+  if (id === 'berry' || id === 'cooked' || id === 'mushroom' || id === 'salve') game.eat(id);
   else if (id === 'torch') game.toggleTorch();
   else if (id === 'home') game.setHome();
-  else if (id === 'campfire' || id === 'wall' || id === 'chest') {
+  else if (id === 'campfire' || id === 'wall' || id === 'chest' || id === 'lantern') {
     if (game.placement === id && mode === 'playing') game.placement = null;
     else if (game.beginPlacement(id)) {
       ui.closeDialogs();
@@ -305,13 +305,31 @@ function handleAction(action) {
 }
 function handleEvents() {
   for (const event of game.drainEvents()) {
-    sound.play(event.type);
+    try {
+      sound.play(event.type, event);
+    } catch {
+      // Audio must never break gameplay.
+    }
     if (event.type === 'gather') {
       renderer.addEffect(event);
-      renderer.addBurst(event.item === 'stone' ? 'stone' : 'leaf', event.x, event.y);
+      const kind =
+        event.item === 'stone'
+          ? 'stone'
+          : event.item === 'crystal'
+            ? 'glow'
+            : event.item === 'wood'
+              ? 'leaf'
+              : 'leaf';
+      renderer.addBurst(kind, event.x, event.y);
     } else if (event.type === 'deny') {
       renderer.addBurst('deny', event.x, event.y);
       ui.denied();
+    } else if (event.type === 'discovery') {
+      renderer.addEffect(event);
+      renderer.addBurst('glow', event.x, event.y);
+      renderer.addShake(0.35);
+      save(false);
+      if (event.text) ui.toast(event.text);
     } else if (event.type === 'death') {
       setMode('gameover');
       save(false);
@@ -320,18 +338,20 @@ function handleEvents() {
       if (event.type === 'build') {
         renderer.addEffect(event);
         renderer.addBurst('spark', event.x, event.y);
+        renderer.addShake(0.22);
         save(false);
       }
       if (event.text) ui.toast(event.text, event.tone);
     }
   }
-  const count = game.goals().filter((goal) => goal.done).length;
+  const goals = game.goals();
+  const count = goals.filter((goal) => goal.done).length;
   if (count > completedGoals && mode !== 'menu') {
     completedGoals = count;
     ui.toast(
-      count === 8
+      count === goals.length
         ? 'Bạn đã có một nơi để trở về. Khu rừng còn rất rộng.'
-        : `Một bước nhỏ đã hoàn thành · ${count}/8 mục tiêu`,
+        : `Một bước nhỏ đã hoàn thành · ${count}/${goals.length} mục tiêu`,
     );
   }
 }
@@ -456,7 +476,23 @@ function loop(now) {
     });
     if (now - lastUI > 120) {
       if (!isMenu) ui.render(game, target);
-      if (mode === 'playing') sound.setNight(getDayInfo(game.elapsed).isNight);
+      if (mode === 'playing') {
+        const day = getDayInfo(game.elapsed);
+        sound.setNight(day.isNight);
+        try {
+          const weather = game.weather();
+          sound.setWeather(weather.type, weather.intensity);
+          const fire = game.nearCampfire(280);
+          const level = fire
+            ? Math.max(0, 1 - Math.hypot(fire.x - game.player.x, fire.y - game.player.y) / 280)
+            : game.torchLit
+              ? 0.22
+              : 0;
+          sound.setFire(level);
+        } catch {
+          // Ambient audio follows the world; it never blocks the loop.
+        }
+      }
       lastUI = now;
     }
     if (debugEnabled()) {
@@ -465,11 +501,20 @@ function loop(now) {
       if (now - frameStats.since > 500) {
         frameStats.fps = Math.round((frameStats.frames * 1000) / (now - frameStats.since));
         frameStats.average = frameStats.total / frameStats.frames;
+        let extra = '';
+        try {
+          const day = getDayInfo(game.elapsed);
+          const weather = hasJourney ? game.weather().type : 'clear';
+          const biome = hasJourney ? game.biome() : 'woodland';
+          extra = ` · Ngày ${day.day} ${day.clock} · ${weather} · ${biome} · gen${game.world.generationVersion}`;
+        } catch {
+          extra = '';
+        }
         ui.debug(
           `${frameStats.fps} FPS · ${frameStats.average.toFixed(1)} ms/khung · ` +
             `${renderer.stats.entities} vật thể · ${renderer.stats.structures} công trình · ` +
             `${renderer.stats.particles} hạt · ${renderer.stats.lights} nguồn sáng · ` +
-            `DPR ${renderer.dpr.toFixed(2)} · ${Math.round(renderer.width)}×${Math.round(renderer.height)}`,
+            `DPR ${renderer.dpr.toFixed(2)} · ${Math.round(renderer.width)}×${Math.round(renderer.height)}${extra}`,
         );
         frameStats = { ...frameStats, frames: 0, total: 0, since: now };
       }

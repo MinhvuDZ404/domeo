@@ -3,6 +3,7 @@
 export const SETTINGS_KEY = 'domeo.settings.v1';
 
 export const MOTION_MODES = ['system', 'on', 'off'];
+export const QUALITY_MODES = ['auto', 'low', 'medium', 'high'];
 
 export const DEFAULT_SETTINGS = Object.freeze({
   volume: 0.7,
@@ -10,6 +11,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   particles: true,
   motion: 'system',
   debug: false,
+  quality: 'auto',
+  shake: true,
 });
 
 const number = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -33,18 +36,20 @@ export function normalizeSettings(value) {
   const source = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const settings = { ...DEFAULT_SETTINGS };
   if (number(source.volume)) settings.volume = clampVolume(source.volume);
-  for (const key of ['ambient', 'particles', 'debug'])
+  for (const key of ['ambient', 'particles', 'debug', 'shake'])
     if (typeof source[key] === 'boolean') settings[key] = source[key];
   if (MOTION_MODES.includes(source.motion)) settings.motion = source.motion;
+  if (QUALITY_MODES.includes(source.quality)) settings.quality = source.quality;
   return settings;
 }
 
 export function validateSettings(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
   if (!number(value.volume) || value.volume < 0 || value.volume > 1) return false;
-  for (const key of ['ambient', 'particles', 'debug'])
+  for (const key of ['ambient', 'particles', 'debug', 'shake'])
     if (typeof value[key] !== 'boolean') return false;
   if (!MOTION_MODES.includes(value.motion)) return false;
+  if (!QUALITY_MODES.includes(value.quality)) return false;
   return Object.keys(value).length === Object.keys(DEFAULT_SETTINGS).length;
 }
 

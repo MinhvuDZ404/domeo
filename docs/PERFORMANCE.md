@@ -1,10 +1,33 @@
-# Hiệu năng Domeo 3.0
+# Hiệu năng Domeo 5.0
 
-Mục tiêu của bản 3.0 không phải "nhanh hơn bằng mọi giá", mà là: **mỗi khung hình không được tiêu
-quá nhiều thời gian cho những việc lẽ ra chỉ làm một lần**. Tài liệu này ghi lại đã đo gì, đo bằng
-cách nào, kết quả ra sao và phần nào còn để ngỏ.
+Mục tiêu hiệu năng của Domeo không phải "nhanh hơn bằng mọi giá", mà là: **mỗi khung hình không
+được tiêu quá nhiều thời gian cho những việc lẽ ra chỉ làm một lần**. Tài liệu này ghi lại đã đo
+gì, đo bằng cách nào, kết quả ra sao và phần nào còn để ngỏ. Số đo 3.0 được giữ lại bên dưới để
+so sánh.
 
-## Đo phần logic (tự động, chạy được trong CI)
+## Bản 5.0: thế giới lớn hơn, ngân sách giữ nguyên
+
+Bản 5.0 thêm vùng sinh thái (nhiễu giá trị theo seed), địa danh, thời tiết và kiểm tra khám phá mỗi
+khung hình — nhưng ngân sách hiệu năng không đổi, và số đo vẫn nằm sâu trong ngân sách:
+
+| Khối lượng việc | 3.0 (trung vị 5 lần) | 5.0 (trung vị 5 lần) | Ngân sách |
+| --------------- | -------------------- | -------------------- | --------- |
+| simulation mean | 0,040 ms             | 0,045 ms             | —         |
+| simulation p95  | 0,089 ms             | 0,089 ms             | < 2,5 ms  |
+| worldQuery mean | 0,100 ms             | 0,101 ms             | —         |
+| worldQuery p95  | 0,200 ms             | 0,251 ms             | < 1,2 ms  |
+
+Đo trên Node v22.22.3, cùng máy, cùng script `npm run perf`. Chi phí tăng không đáng kể vì:
+
+- Kiểm tra khám phá địa danh chạy tối đa ~3 lần/giây thay vì mỗi bước (địa danh không di chuyển).
+- Truy vấn địa danh không còn nạp thừa chunk nhờ tính đúng biên chunk cần thiết.
+- Vùng sinh thái là nhiễu giá trị thuần túy theo tọa độ, không lưu thêm bộ nhớ.
+
+Phần vẽ thêm cài đặt **chất lượng hình ảnh** (tự động/nhẹ/chuẩn/đẹp): chế độ tự động chọn mức theo
+chiều rộng màn hình, giới hạn số hạt (60/120/180) và số nguồn sáng (4/8). Rung camera có thể tắt
+riêng, và tự tắt khi bật giảm chuyển động.
+
+## Đo phần logic (tự động, chạy được trong CI) — số liệu gốc 3.0
 
 `scripts/perf.mjs` chạy hai khối lượng công việc bằng chính mã game, không cần trình duyệt:
 
@@ -73,10 +96,10 @@ Mục tiêu để tham chiếu: **60 FPS trên máy tính để bàn** và **t�
 tầm trung**. Nếu thấp hơn, hãy tắt "Hiệu ứng khi hái lượm" và bật "Giảm chuyển động" rồi đo lại —
 bảng thông số sẽ cho biết chênh lệch.
 
-> **Còn để ngỏ:** trong môi trường soạn bản 3.0 không có Chromium/Playwright cài sẵn (không tải
-> được trình duyệt), nên **chưa có số đo khung hình thật trên trình duyệt hay trên điện thoại**.
-> Bảng ở trên chỉ là phần logic. Hãy coi các con số FPS thực tế là việc cần bạn xác nhận trước khi
-> tuyên bố hỗ trợ một thiết bị cụ thể — xem `docs/RELEASE-3.0.md`.
+> **Còn để ngỏ:** trong môi trường soạn bản 3.0 và 5.0 không có Chromium/Playwright cài sẵn
+> (không tải được trình duyệt), nên **chưa có số đo khung hình thật trên trình duyệt hay trên điện
+> thoại**. Bảng ở trên chỉ là phần logic. Hãy coi các con số FPS thực tế là việc cần bạn xác nhận
+> trước khi tuyên bố hỗ trợ một thiết bị cụ thể — xem `docs/RELEASE-5.0.md`.
 
 ## Giới hạn đã biết
 

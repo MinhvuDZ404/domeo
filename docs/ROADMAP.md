@@ -4,6 +4,24 @@
 - **Nền tảng:** bản 2.0 hiện có trong workspace
 - **Trạng thái:** đề xuất để triển khai từng đợt; tài liệu này không có nghĩa các tính năng bên dưới đã được làm hoặc phát hành.
 - **Cập nhật 21/09/2026:** bản **4.0.0** đã làm một phần v2.1 (chuyển đổi bản lưu, xuất/nhập, khóa tab) và một phần v2.2 (rương, nấu ăn, đánh dấu nhà). Bản **4.0.1** sửa lỗi đơ khi bắt đầu hành trình, đồng thời hoàn thiện la bàn, bản đồ nhỏ và việc chuyển đồ với rương. Vùng sinh thái, nhiệm vụ dài và chiến đấu vẫn chờ.
+- **Cập nhật 21/09/2026 (bản 5.0.0):** đã làm phần lớn **v2.3** (6 vùng sinh thái, 6 địa danh có quà khám phá, thế giới v2 cho hành trình mới, giữ v1 cho hành trình cũ) và một phần **v2.4** (nhật ký 11 bước gồm khám phá và sinh tồn dài ngày, địa danh kể chuyện bằng quà và tên gọi). Chưa làm: bàn chế tạo, tường/cửa (v2.2 còn lại), tuyến nhiệm vụ có thưởng (v2.4 còn lại), chiến đấu (v2.5 tùy chọn).
+
+## 0a. Bản 5.0 đã làm gì so với lộ trình này
+
+Bản 5.0 đi vào **v2.3 (khu rừng rộng hơn)** và một phần **v2.4 (hành trình có đích)**:
+
+| Mốc lộ trình                  | Trạng thái trong 5.0                                                                                                                                                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1 — Nền tảng an toàn       | **Đã làm từ 4.0**, mở rộng trong 5.0: chuyển đổi bản lưu nhiều bước (schema 1 → 2 → 3), giữ thuật toán sinh thế giới cũ cho hành trình cũ.                                                                                                               |
+| v2.2 — Một nơi để trở về      | **Đã làm một phần từ 4.0** (rương, nấu ăn, đánh dấu nhà). Chưa làm: bàn chế tạo, tường/cửa, tháo dỡ.                                                                                                                                                     |
+| v2.3 — Khu rừng rộng hơn      | **Đã làm phần lớn:** 6 vùng sinh thái theo seed, 6 loại địa danh có quà, bản đồ nhỏ hiển thị địa danh đã khám phá, la bàn về nhà (từ 4.0). Chưa làm: bờ nước không thể đi qua, thuyền, hang động.                                                        |
+| v2.4 — Một hành trình có đích | **Đã làm một phần:** nhật ký 11 bước (mở đầu → căn cứ → hái lượm → khám phá → sống qua ngày 24 phút), địa danh kể chuyện bằng tên và quà. Chưa làm: nhiệm vụ có ID/phần thưởng, tháp tín hiệu, tuyến truyện 30–60 phút.                                  |
+| v2.5 — Hiểm nguy trong rừng   | **Chưa làm** và vẫn là hạng mục tùy chọn.                                                                                                                                                                                                                |
+| v3.0 — Bản hoàn thiện         | **Lặp lại chu kỳ hoàn thiện:** 89 kiểm thử logic + 24 kịch bản trình duyệt, ngân sách hiệu năng giữ nguyên, số đo cân bằng mới, chất lượng hình ảnh tùy chọn. Điều kiện "thử trên điện thoại thật" và "đo FPS thật" vẫn chờ (xem `docs/RELEASE-5.0.md`). |
+
+Đợt tiếp theo nên là **phần còn lại của v2.4** (nhiệm vụ có thưởng gắn với địa danh đã có) hoặc
+**phần còn lại của v2.2** (bàn chế tạo, tường/cửa), vì cả hai đều xây trên nền 5.0 mà không cần đổi
+định dạng bản lưu hay thuật toán sinh thế giới.
 
 ## 0. Bản 3.0 đã làm gì so với lộ trình này
 

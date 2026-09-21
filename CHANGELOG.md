@@ -3,6 +3,55 @@
 Mọi thay đổi đáng chú ý của Domeo được ghi ở đây. Game hiển thị phiên bản trong mục **Cài đặt**
 (phím `O`, phần cuối hộp thoại) và ở `src/config.js`.
 
+## 5.0.0 — 21/09/2026
+
+Bản **Khu rừng đáng đi xa**: vùng sinh thái, địa danh, hái lượm mở rộng và một ngày dài 24 phút.
+
+### Thế giới
+
+- Thuật toán sinh thế giới lên phiên bản 2 cho hành trình mới: 6 vùng sinh thái (đồng cỏ, rừng,
+  rừng sâu, rừng sương, vùng đá, rừng cổ thụ) với tài nguyên và cảnh quan riêng, quyết định bằng
+  nhiễu giá trị theo seed — cùng seed cho cùng một khu rừng, không phụ thuộc thứ tự ghé thăm.
+- 6 loại địa danh (vòng đá, trại cũ, miếu rừng, ao, tảng đá khổng lồ, cây cổ thụ), mỗi seed có ít
+  nhất một địa danh trong tầm đi bộ ngắn; đến gần sẽ khám phá và nhận quà (tinh thể, cao dán,
+  nguyên liệu). Không thể dựng công trình chồng lên địa danh.
+- Hành trình cũ giữ nguyên thuật toán v1: cây cối, tài nguyên và vị trí không xê dịch một điểm ảnh.
+- Một ngày trong game dài đúng 24 phút (1440 giây mô phỏng), với bình minh, hoàng hôn, nửa đêm và
+  đồng hồ hiển thị theo pha. Đêm vẫn nguy hiểm theo cách cũ: chỉ tối hơn và đẹp hơn.
+- Thời tiết theo seed (quang, mây, sương, mưa), có tiếng mưa, hạt mưa và sương mù khi bật hiệu ứng.
+
+### Hái lượm và chế tạo
+
+- Tài nguyên mới: **nấm rừng** (ăn +15 no +2 máu, hoặc làm thuốc), **thảo mộc** (kèm 1 sợi khi hái),
+  **tinh thể** (gỡ bằng cuốc, hồi sau 5 phút). Gần nhà luôn có sẵn một cụm nấm và một cụm thảo mộc.
+- Công thức mới: **cao dán thảo mộc** (2 nấm + 1 thảo mộc, dùng bằng phím `G`, +35 máu) và **đèn
+  lồng** (4 gỗ + 2 sợi + 1 tinh thể, đặt bằng phím `8`, soi sáng vùng rộng).
+- Nhật ký mở rộng thành 11 bước: thêm hái lượm mới, chế cao dán/đèn lồng, khám phá địa danh và sống
+  qua một ngày 24 phút.
+
+### Hình ảnh và âm thanh
+
+- Mọi hình ảnh mới đều vẽ bằng mã (Canvas 2D), không thêm tệp ảnh hay âm thanh nào: nấm, thảo mộc,
+  tinh thể phát sáng, lửa trại, đèn lồng, cây cổ thụ và cả 6 địa danh.
+- Nhạc hiệu khám phá, tiếng bước chân theo mặt đất, tiếng mưa, tiếng lửa lách tách gần trại, tiếng
+  côn trùng ban đêm và âm tinh thể khi gỡ.
+- Camera bám mượt có nhìn trước hướng đi, rung nhẹ khi dựng công trình hoặc khám phá (tắt được trong
+  Cài đặt, và tự tắt khi bật giảm chuyển động). Cài đặt thêm chất lượng hình ảnh (tự động/nhẹ/chuẩn/
+  đẹp) để máy yếu vẫn chơi mượt.
+
+### Bản lưu
+
+- Cấu trúc bản lưu lên phiên bản 3. Hành trình 2.0/3.0 (schema 1) và 4.0 (schema 2) được chuyển đổi
+  từng bước khi đọc, giữ nguyên thế giới v1; chỉ hành trình mới dùng thế giới v2.
+- Tên khóa `localStorage` giữ nguyên `domeo.journey.v1` để không mất bản lưu nào.
+
+### Kiểm thử
+
+- Số kiểm thử logic: 71 → **89** (vùng sinh thái, địa danh, thời tiết, cao dán, đèn lồng, đêm, mục
+  tiêu mới, chuyển đổi bản lưu 4.0).
+- Kịch bản trình duyệt: 22 → **24** (hái nấm/chế cao dán/dựng đèn lồng, khám phá địa danh).
+- `npm run balance` mô phỏng thêm mốc hái lượm, chế cao dán và khám phá; xem `docs/BALANCE.md`.
+
 ## 4.0.1 — 21/09/2026
 
 Bản sửa nhanh cho 4.0: **trò chơi đơ ngay khi bắt đầu hành trình**.

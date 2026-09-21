@@ -121,7 +121,7 @@
             ><span><kbd>B</kbd> Túi đồ</span>
           </div>
           <span id="edition-label" class="edition"
-            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v4.0</i></span
+            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v5.0</i></span
           >
           >
         </footer>
@@ -168,7 +168,8 @@
             </div>
           </div>
           <div class="location-label">
-            <span data-icon="pin" data-size="13"></span> Rừng tĩnh lặng
+            <span data-icon="pin" data-size="13"></span>
+            <span id="location-name">Rừng tĩnh lặng</span>
             <span id="coordinates">0, 0</span>
           </div>
           <div class="wayfinding" aria-label="La bàn và bản đồ">
@@ -193,10 +194,10 @@
         <aside class="journal-card glass-panel" aria-label="Mục tiêu khởi đầu">
           <button id="journal-toggle" class="journal-heading" aria-expanded="true">
             <span><span data-icon="leaf" data-size="17"></span> MỘT NƠI ĐỂ TRỞ VỀ</span
-            ><small id="goal-count">0/8</small>
+            ><small id="goal-count">0/11</small>
           </button>
           <ol id="goal-list"></ol>
-          <div class="journal-footer">Mỗi điều nhỏ bé, một khởi đầu.</div>
+          <div id="journal-footer" class="journal-footer">Mỗi điều nhỏ bé, một khởi đầu.</div>
         </aside>
         <div id="interaction-prompt" class="interaction-prompt" hidden>
           <kbd>E</kbd><span id="interaction-label">Hái quả mọng</span
@@ -466,6 +467,20 @@
             >O mở cài đặt âm lượng, âm thanh môi trường và hiệu ứng. M bật hoặc tắt tiếng.</span
           >
         </div>
+        <div>
+          <kbd>Ngày 24 phút</kbd><strong>Một ngày là một chuyến đi</strong
+          ><span
+            >Mỗi ngày dài 24 phút: bình minh, trưa, hoàng hôn rồi đêm. Đêm đẹp nhưng tối — hãy mang
+            đuốc hoặc thắp đèn lồng.</span
+          >
+        </div>
+        <div>
+          <kbd>8 / Túi</kbd><strong>Nấm, thảo mộc, tinh thể</strong
+          ><span
+            >Rừng sâu có nấm, đồng cỏ có thảo mộc, đất đá có tinh thể. Chế cao dán để hồi máu, đèn
+            lồng để soi đường.</span
+          >
+        </div>
       </div>
       <div class="help-note">
         <span data-icon="save" data-size="19"></span
@@ -477,7 +492,7 @@
       <button class="button button-dark" data-close>
         Mình sẵn sàng rồi <span data-icon="arrow" data-size="18"></span>
       </button>
-      <small id="game-version" class="dialog-footnote">Domeo v4.0</small>
+      <small id="game-version" class="dialog-footnote">Domeo v5.0</small>
     </dialog>
 
     <dialog
@@ -537,6 +552,28 @@
               <option value="on">Luôn giảm</option>
               <option value="off">Luôn bật đầy đủ</option>
             </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Chất lượng hình ảnh</strong
+            ><small>Tự động theo màn hình, hoặc chọn tay khi máy yếu.</small>
+          </div>
+          <div class="settings-control">
+            <select id="settings-quality" aria-label="Chất lượng hình ảnh">
+              <option value="auto">Tự động</option>
+              <option value="low">Nhẹ</option>
+              <option value="medium">Chuẩn</option>
+              <option value="high">Đẹp</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <strong>Rung camera</strong><small>Rung nhẹ khi dựng công trình hoặc khám phá.</small>
+          </div>
+          <div class="settings-control">
+            <input id="settings-shake" type="checkbox" aria-label="Rung camera" />
           </div>
         </div>
         <div class="settings-row">

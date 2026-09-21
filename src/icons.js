@@ -35,6 +35,17 @@ const paths = {
   hand: '<path d="M8 12V5a2 2 0 0 1 4 0v7-8a2 2 0 0 1 4 0v9-6a2 2 0 0 1 4 0v9c0 8-10 7-13 3l-4-5c-2-3 1-5 3-2l2 2"/>',
   pin: '<path d="M19 9c0 6-7 13-7 13S5 15 5 9a7 7 0 0 1 14 0Z"/><circle cx="12" cy="9" r="2"/>',
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4m0 13.6v2.4M2.8 12h2.4m13.6 0h2.4M5.5 5.5l1.7 1.7m9.6 9.6 1.7 1.7m0-13-1.7 1.7M7.2 16.8l-1.7 1.7"/>',
+  mushroom:
+    '<path d="M4 12a8 8 0 0 1 16 0H4Z"/><path d="M10 12v6a2 2 0 0 0 4 0v-6M9 7h.01M14 8h.01"/>',
+  herb: '<path d="M12 21V8"/><path d="M12 13c0-4-3-7-7-7 0 4 3 7 7 7Zm0-1c0-4 3-7 7-7 0 4-3 7-7 7Z"/>',
+  crystal: '<path d="M12 2l5 7-5 13L7 9l5-7Z"/><path d="M7 9h10M12 2v20"/>',
+  salve:
+    '<rect x="6" y="9" width="12" height="11" rx="3"/><path d="M9 9V7a3 3 0 0 1 6 0v2M9 14h6"/>',
+  lantern:
+    '<rect x="8" y="7" width="8" height="11" rx="2"/><path d="M10 7V5a2 2 0 0 1 4 0v2M8 12h8M12 18v3"/>',
+  cloud: '<path d="M6 18a4 4 0 0 1 0-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17 18H6Z"/>',
+  rain: '<path d="M6 14a4 4 0 0 1 0-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17 14H6Z"/><path d="M8 17v2m4-2v2m4-2v2"/>',
+  mist: '<path d="M4 9h16M6 13h12M8 17h8M5 21h14"/>',
 };
 export function icon(name, size = 24) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.leaf}</svg>`;
