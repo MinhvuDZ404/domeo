@@ -66,6 +66,14 @@ const ui = new UI({
       save(false);
     }
   },
+  claimQuest: (id) => {
+    if (game.claimQuest(id)) {
+      handleEvents();
+      ui.renderJournal(game);
+      ui.render(game, game.getTarget());
+      save(false);
+    }
+  },
 });
 const input = new Input({
   active: () => mode === 'playing',
@@ -74,11 +82,13 @@ const input = new Input({
     mousePoint = renderer.screenToWorld(x, y);
   },
   place: () => {
+    // One pointer, two meanings: with something in hand it places, otherwise it
+    // swings at whatever is under the cursor.
     if (game.placement && mousePoint) {
       game.place(mousePoint.x, mousePoint.y);
       handleEvents();
       ui.render(game, game.getTarget());
-    }
+    } else if (mousePoint) attackToward(mousePoint);
   },
   resetPoint: () => {
     mousePoint = null;
@@ -94,9 +104,20 @@ if (loadedSettings.repaired && !loadedSettings.error)
 function setMode(next) {
   input.clear();
   mousePoint = null;
+  const leavingPlay = mode === 'playing' && next !== 'playing';
   mode = next;
   lastTime = performance.now();
   lastUI = 0;
+  if (leavingPlay) {
+    // Ambient beds describe a world that is running. Pausing, opening the menu
+    // or dying stops the world, so the tension bed stops with it instead of
+    // droning on over a paused screen.
+    try {
+      sound.setDanger(0);
+    } catch {
+      // Audio must never block a state change.
+    }
+  }
   if (hasJourney) ui.render(game, game.getTarget());
 }
 function commitSettings(next) {
@@ -181,6 +202,9 @@ function startJourney(data = null) {
   completedGoals = game.goals().filter((goal) => goal.done).length;
   autosaveAt = game.elapsed + 15;
   ui.lastGoalSignature = '';
+  ui.lastQuestSignature = '';
+  ui.lastCampSignature = '';
+  sound.setDanger(0);
   setMode('playing');
   ui.render(game, game.getTarget());
   save(false);
@@ -190,6 +214,12 @@ function startJourney(data = null) {
       ? 'Chào mừng trở lại. Rừng vẫn đang đợi bạn.'
       : 'Chào người lữ khách. Bắt đầu bằng một bụi quả nhé.',
   );
+}
+function openJournal() {
+  if (!['playing', 'paused', 'inventory'].includes(mode)) return;
+  setMode('journal');
+  ui.renderJournal(game);
+  ui.openDialog('journal-dialog');
 }
 function openInventory(tab = 'bag') {
   if (!['playing', 'inventory'].includes(mode)) return;
@@ -216,7 +246,7 @@ function closeOverlay() {
     setMode('menu');
     return;
   }
-  if (['paused', 'inventory'].includes(mode)) {
+  if (['paused', 'inventory', 'journal'].includes(mode)) {
     ui.closeDialogs();
     setMode('playing');
   }
@@ -260,6 +290,12 @@ function useItem(id) {
   handleEvents();
   ui.render(game, game.getTarget());
 }
+function attackToward(point = null) {
+  const p = game.player;
+  const aim = point ? { x: point.x - p.x, y: point.y - p.y } : null;
+  game.attack(aim && (aim.x || aim.y) ? aim : null);
+  handleEvents();
+}
 function handleAction(action) {
   if (!ready) return;
   if (action === 'escape') {
@@ -287,8 +323,28 @@ function handleAction(action) {
     else if (['menu', 'playing', 'paused', 'inventory'].includes(mode)) openSettings();
     return;
   }
+  if (action === 'journal') {
+    if (mode === 'journal') closeOverlay();
+    else if (['playing', 'paused', 'inventory'].includes(mode)) openJournal();
+    return;
+  }
   if (mode !== 'playing') return;
-  if (action === 'interact') {
+  if (action === 'attack') {
+    if (game.placement) return;
+    attackToward(mousePoint);
+  } else if (action === 'dodge') {
+    if (game.dodge(input.movement())) {
+      // A dodge that fires as the player moves keeps the momentum readable.
+      handleEvents();
+    }
+  } else if (action === 'target') {
+    if (game.passive('wayfinder') || game.flags?.groveRevealed) {
+      game.cycleCompass();
+      ui.render(game, game.getTarget());
+    } else {
+      ui.toast('La bàn chỉ dẫn tới nơi này. Học thêm ở nhật ký để mở khoá mục tiêu khác.');
+    }
+  } else if (action === 'interact') {
     if (game.placement) {
       const point = mousePoint || game.placementPoint();
       game.place(point.x, point.y);
@@ -310,38 +366,120 @@ function handleEvents() {
     } catch {
       // Audio must never break gameplay.
     }
-    if (event.type === 'gather') {
-      renderer.addEffect(event);
-      const kind =
-        event.item === 'stone'
-          ? 'stone'
-          : event.item === 'crystal'
-            ? 'glow'
-            : event.item === 'wood'
-              ? 'leaf'
-              : 'leaf';
-      renderer.addBurst(kind, event.x, event.y);
-    } else if (event.type === 'deny') {
-      renderer.addBurst('deny', event.x, event.y);
-      ui.denied();
-    } else if (event.type === 'discovery') {
-      renderer.addEffect(event);
-      renderer.addBurst('glow', event.x, event.y);
-      renderer.addShake(0.35);
-      save(false);
-      if (event.text) ui.toast(event.text);
-    } else if (event.type === 'death') {
-      setMode('gameover');
-      save(false);
-      ui.gameOver(game);
-    } else {
-      if (event.type === 'build') {
+    switch (event.type) {
+      case 'gather': {
+        renderer.addEffect(event);
+        const kind =
+          event.item === 'stone' || event.item === 'geode'
+            ? 'stone'
+            : event.item === 'crystal'
+              ? 'glow'
+              : event.item === 'ancientWood'
+                ? 'glow'
+                : 'leaf';
+        renderer.addBurst(kind, event.x, event.y);
+        break;
+      }
+      case 'deny':
+        renderer.addBurst('deny', event.x, event.y);
+        ui.denied();
+        break;
+      case 'discovery':
+        renderer.addEffect(event);
+        renderer.addBurst('glow', event.x, event.y);
+        renderer.addShake(0.35);
+        save(false);
+        if (event.text) ui.toast(event.text);
+        break;
+      case 'death':
+        setMode('gameover');
+        save(false);
+        ui.gameOver(game);
+        break;
+      case 'build':
         renderer.addEffect(event);
         renderer.addBurst('spark', event.x, event.y);
         renderer.addShake(0.22);
         save(false);
+        if (event.text) ui.toast(event.text, event.tone);
+        break;
+      // ---- 5.1: combat, quests and camp -----------------------------------
+      case 'swing':
+        renderer.addCombatFx('slash', { x: event.x, y: event.y, angle: event.angle });
+        break;
+      case 'dodge':
+        renderer.addCombatFx('dodge', { x: event.x, y: event.y });
+        renderer.addBurst('dust', event.x, event.y);
+        break;
+      case 'enemyHit':
+        renderer.addBurst('hit', event.x, event.y);
+        renderer.addShake(0.08);
+        break;
+      case 'enemyDeath': {
+        renderer.addBurst(event.elite ? 'echo' : 'blood', event.x, event.y);
+        if (event.elite) renderer.addShake(0.5);
+        const loot = event.lootText ? ` · ${event.lootText}` : '';
+        ui.toast(`Đã hạ ${event.name}${loot}`);
+        save(false);
+        break;
       }
-      if (event.text) ui.toast(event.text, event.tone);
+      case 'playerHurt':
+        renderer.addBurst('blood', event.x, event.y);
+        renderer.addShake(0.42);
+        break;
+      case 'enemyTelegraph':
+        renderer.addShake(0.06);
+        break;
+      case 'enemyStrike':
+        if (event.slam) renderer.addShake(0.45);
+        else if (event.hit) renderer.addShake(0.18);
+        break;
+      case 'projectileHit':
+        renderer.addBurst('spore', event.x, event.y);
+        break;
+      case 'quest':
+        ui.toast(event.text ?? 'Một việc mới trong nhật ký', 'quest');
+        sound.play('quest');
+        break;
+      case 'questComplete':
+        ui.toast(event.text ?? 'Nhiệm vụ đã xong', 'quest');
+        sound.play('questComplete');
+        save(false);
+        break;
+      case 'questClaimed':
+        ui.toast(event.text ?? 'Nhận thưởng', 'quest');
+        sound.play('questClaimed');
+        renderer.addBurst('echo', game.player.x, game.player.y);
+        save(false);
+        break;
+      case 'rest':
+        renderer.addBurst('glow', game.player.x, game.player.y);
+        if (event.text) ui.toast(event.text);
+        break;
+      case 'beaconLit':
+        renderer.addBurst('ember', event.x, event.y - 90);
+        renderer.addShake(0.3);
+        save(false);
+        if (event.text) ui.toast(event.text);
+        break;
+      case 'groveCleared':
+        save(false);
+        if (event.text) ui.toast(event.text);
+        break;
+      case 'eliteAwake':
+        ui.toast(`Người giữ rừng cổ đã thức dậy.`, 'warning');
+        sound.play('rally');
+        break;
+      case 'revive':
+        ui.toast('Bạn tỉnh dậy bên lửa nhà. Mọi thứ vẫn còn đó.');
+        break;
+      case 'journeyComplete':
+        ui.toast(event.text ?? 'Hành trình đã trọn vẹn.', 'quest');
+        sound.play('beacon');
+        save(false);
+        break;
+      default:
+        if (event.text) ui.toast(event.text, event.tone);
     }
   }
   const goals = game.goals();
@@ -374,6 +512,16 @@ $('continue-button').addEventListener('click', () => {
 });
 $('confirm-new-button').addEventListener('click', () => startJourney());
 $('restart-button').addEventListener('click', () => startJourney());
+$('revive-button').addEventListener('click', () => {
+  if (game.revive()) {
+    handleEvents();
+    ui.closeDialogs();
+    setMode('playing');
+    ui.render(game, game.getTarget());
+    save(false);
+  }
+});
+$('journal-open').addEventListener('click', () => handleAction('journal'));
 $('pause-button').addEventListener('click', pause);
 $('resume-button').addEventListener('click', closeOverlay);
 $('save-button').addEventListener('click', () => save(true));
@@ -426,6 +574,18 @@ $('import-file').addEventListener('change', async (event) => {
   stored = { data: parsed.data, error: null };
   startJourney(parsed.data);
 });
+// A read-only diagnostics surface: the live objects, for the browser tests and
+// for anyone debugging their own journey from the console. Nothing in the game
+// reads it back, and it exposes no way to change the save.
+window.__domeo = {
+  game: () => game,
+  ui,
+  renderer,
+  sound,
+  input,
+  version: GAME_VERSION,
+  debug: () => debugEnabled(),
+};
 window.addEventListener('blur', () => {
   if (mode === 'playing') pause();
 });
@@ -454,8 +614,11 @@ function loop(now) {
   lastTime = now;
   if (ready) {
     if (mode === 'playing') {
+      game.sprinting = input.sprinting;
       game.update(dt, input.movement());
       if (input.interacting && !game.placement) game.interact();
+      // Holding the attack input keeps swinging as soon as the weapon is ready.
+      if (input.attacking && !game.placement && game.cooldown <= 0) attackToward(mousePoint);
       handleEvents();
       if (game.elapsed >= autosaveAt) {
         save(false);
@@ -489,6 +652,8 @@ function loop(now) {
               ? 0.22
               : 0;
           sound.setFire(level);
+          // Danger is one number for both the badge and the audio bed.
+          sound.setDanger(game.threat ? game.threat() : 0);
         } catch {
           // Ambient audio follows the world; it never blocks the loop.
         }
@@ -506,7 +671,12 @@ function loop(now) {
           const day = getDayInfo(game.elapsed);
           const weather = hasJourney ? game.weather().type : 'clear';
           const biome = hasJourney ? game.biome() : 'woodland';
-          extra = ` · Ngày ${day.day} ${day.clock} · ${weather} · ${biome} · gen${game.world.generationVersion}`;
+          const quest = game.questSummary?.();
+          const event = game.worldEvent?.();
+          extra =
+            ` · Ngày ${day.day} ${day.clock} · ${weather} · ${biome} · gen${game.world.generationVersion}` +
+            ` · ${renderer.stats.enemies} sinh vật · ${quest ? quest.id : 'hết nhiệm vụ'}` +
+            `${event ? ` · ${event.id}` : ''} · cấp trại ${game.campSummary().level}`;
         } catch {
           extra = '';
         }

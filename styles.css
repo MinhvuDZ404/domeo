@@ -2299,3 +2299,295 @@ dialog .toast {
     font-size: 9px;
   }
 }
+
+/* ---- 5.1: survival, quests, camp and danger ---------------------------- */
+/* Two more vitals sit under health and hunger: warmth (a slow night pressure)
+   and stamina (only spent by sprinting, dodging and fighting). */
+.warmth-color {
+  color: #c8a184;
+}
+.stamina-color {
+  color: #9fc0d0;
+}
+.warmth-meter span {
+  background: #c89a72;
+}
+.stamina-meter span {
+  background: #8fb3c4;
+}
+.warmth-meter.low span {
+  background: #7fa8c4;
+}
+.stamina-meter.low span {
+  background: #6f8fa0;
+}
+
+/* The tracker is the one quest line that is always on screen. */
+.quest-tracker {
+  padding: 10px 2px 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.quest-tracker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.quest-tracker-head strong {
+  font-family: 'PlayfairDisplay', serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e6e8cf;
+}
+.quest-tracker-head small {
+  font-size: 9px;
+  color: #a8bd94;
+  font-variant-numeric: tabular-nums;
+}
+.quest-tracker p {
+  margin: 4px 0 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #b7c5a8;
+}
+.quest-progress {
+  height: 3px;
+  border-radius: 3px;
+  background: #394938;
+  overflow: hidden;
+}
+.quest-progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: #cbbd7c;
+  transition: width 0.3s;
+}
+.quest-rewards {
+  margin-top: 7px;
+  font-size: 9px;
+  color: #e0c98a;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.journal-open {
+  margin-top: 8px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  width: 100%;
+  justify-content: center;
+}
+.journal-open kbd {
+  font-size: 9px;
+}
+
+/* The camp panel only exists once there is a camp. */
+.camp-panel {
+  position: absolute;
+  left: 30px;
+  bottom: 200px;
+  width: 231px;
+  padding: 13px 15px 12px;
+}
+.camp-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  color: #d6dcc0;
+}
+.camp-head small {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0;
+  color: #a8bd94;
+}
+.camp-next {
+  margin: 8px 0 9px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #b7c5a8;
+}
+.camp-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.camp-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: #7d8f77;
+  border: 1px solid #3d4b3a;
+  border-radius: 10px;
+  padding: 2px 7px;
+}
+.camp-item.built {
+  color: #e0dcb6;
+  border-color: #6d7a53;
+  background: #4a5a3a55;
+}
+.camp-dot {
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
+}
+
+/* A danger badge, not a health bar: it appears when something noticed you. */
+.threat-badge {
+  position: absolute;
+  /* Sits under the clock so it never overlaps the date widget. */
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: #e6d6a8;
+  border: 1px solid #8d7a4a66;
+  background: #46301faa;
+}
+.threat-badge.danger {
+  color: #f6d2c2;
+  border-color: #c4876a99;
+  background: #5d2a1faa;
+}
+.threat-badge svg {
+  flex: none;
+}
+
+/* The full journal. */
+.journal-dialog {
+  max-width: 620px;
+}
+.journal-list {
+  max-height: 54vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.journal-group + .journal-group {
+  margin-top: 14px;
+}
+.journal-group-title {
+  font-family: 'PlayfairDisplay', serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: #b8ab7d;
+  margin: 0 0 8px;
+}
+.quest-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 13px;
+  margin-bottom: 9px;
+  background: #1d2a2155;
+}
+.quest-card.claimed {
+  opacity: 0.62;
+}
+.quest-card.done {
+  border-color: #7d8a5b;
+  background: #2f3b2655;
+}
+.quest-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.quest-card h3 {
+  font-family: 'PlayfairDisplay', serif;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 3px;
+  color: #e8e6cf;
+}
+.quest-card small {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #98a88c;
+  display: block;
+}
+.quest-status {
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #a8bd94;
+  border: 1px solid #4d5c40;
+  border-radius: 9px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.quest-objectives {
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.quest-objectives li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: #c3cdb2;
+}
+.quest-objectives li small {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: #8e9c82;
+}
+.quest-objectives li.done {
+  color: #8e9c82;
+  text-decoration: line-through;
+}
+.quest-reward-line {
+  margin: 9px 0 0;
+  font-size: 9px;
+  color: #e0c98a;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.quest-hint {
+  margin: 7px 0 0;
+  font-size: 9px;
+  font-style: italic;
+  color: #8b9a80;
+}
+.quest-card .button {
+  margin-top: 10px;
+  width: 100%;
+}
+
+/* Combat verbs and quest feedback. */
+.touch-attack,
+.touch-dodge {
+  background: #7d5a4266;
+  border-color: #d6b48a66;
+}
+.toast.quest {
+  border-color: #b8ab7d66;
+  color: #eadfae;
+}
+.threat-badge[hidden],
+.camp-panel[hidden] {
+  display: none;
+}

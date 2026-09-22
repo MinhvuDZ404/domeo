@@ -22,15 +22,24 @@ const actions = {
   Digit8: 'lantern',
   KeyG: 'salve',
   KeyH: 'home',
+  KeyQ: 'dodge',
+  KeyN: 'journal',
+  KeyT: 'target',
   KeyM: 'mute',
   KeyO: 'options',
   Escape: 'escape',
 };
+// Keys that are held rather than tapped. They are also the keys the game reads
+// while the player is moving, so they must never be swallowed by a modal.
+const heldKeys = ['Space', 'KeyJ', 'ShiftLeft', 'ShiftRight'];
+// The four keys that stay reachable while a dialog is open.
+const alwaysAvailable = ['KeyB', 'KeyC', 'KeyM', 'KeyO'];
 export class Input {
   constructor({ active, action, point, place, resetPoint }) {
     this.keys = new Set();
     this.stick = { x: 0, y: 0 };
     this.touchInteract = false;
+    this.touchAttack = false;
     this.active = active;
     window.addEventListener('keydown', (event) => {
       if (
@@ -47,15 +56,20 @@ export class Input {
       }
       if (!active()) {
         // Bags, crafting, sound and settings stay reachable while paused.
-        if (['KeyB', 'KeyC', 'KeyM', 'KeyO'].includes(event.code) && !event.repeat)
-          action(actions[event.code]);
+        if (alwaysAvailable.includes(event.code) && !event.repeat) action(actions[event.code]);
         return;
       }
-      if (movementCodes.includes(event.code) || event.code === 'KeyE') {
+      if (
+        movementCodes.includes(event.code) ||
+        event.code === 'KeyE' ||
+        heldKeys.includes(event.code)
+      ) {
         event.preventDefault();
         this.keys.add(event.code);
         if (movementCodes.includes(event.code)) resetPoint();
         if (event.code === 'KeyE' && !event.repeat) action('interact');
+        // A tap attacks immediately; holding it keeps attacking on cooldown.
+        if ((event.code === 'Space' || event.code === 'KeyJ') && !event.repeat) action('attack');
       } else if (actions[event.code] || event.code === 'Tab') {
         event.preventDefault();
         if (!event.repeat) action(actions[event.code] || 'bag');
@@ -135,6 +149,19 @@ export class Input {
         this.touchInteract = false;
       });
     document.getElementById('touch-eat').addEventListener('click', () => action('eat'));
+    const attackButton = document.getElementById('touch-attack');
+    attackButton?.addEventListener('pointerdown', (event) => {
+      if (!active()) return;
+      event.preventDefault();
+      attackButton.setPointerCapture(event.pointerId);
+      this.touchAttack = true;
+      action('attack');
+    });
+    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
+      attackButton?.addEventListener(event, () => {
+        this.touchAttack = false;
+      });
+    document.getElementById('touch-dodge')?.addEventListener('click', () => action('dodge'));
   }
   movement() {
     const has = (...codes) => (codes.some((code) => this.keys.has(code)) ? 1 : 0);
@@ -146,11 +173,24 @@ export class Input {
   get interacting() {
     return this.keys.has('KeyE') || this.touchInteract;
   }
+  /** Held attack input: the loop re-attacks whenever the weapon is ready. */
+  get attacking() {
+    return this.keys.has('Space') || this.keys.has('KeyJ') || this.touchAttack;
+  }
+  /** Walking is always free; only sprinting, dodging and fighting cost stamina. */
+  get sprinting() {
+    return (
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      Math.hypot(this.stick.x, this.stick.y) > 0.92
+    );
+  }
   clear() {
     this.releaseStick?.();
     this.keys.clear();
     this.stick = { x: 0, y: 0 };
     this.touchInteract = false;
+    this.touchAttack = false;
     if (this.knob) this.knob.style.transform = '';
   }
 }

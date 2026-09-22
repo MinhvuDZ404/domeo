@@ -1,14 +1,39 @@
-import { BIOMES, CHUNK_SIZE, RESOURCES, clamp, getDayInfo, getWeather } from './config.js';
+import {
+  BIOMES,
+  CAMP_RADIUS,
+  CHUNK_SIZE,
+  DODGE_DURATION,
+  RESOURCES,
+  clamp,
+  getDayInfo,
+  getWeather,
+} from './config.js';
 import { DEFAULT_SETTINGS } from './settings.js';
 import {
+  drawAncientGrove,
+  drawBeacon,
+  drawCreature,
   drawCrystalCluster,
   drawFire,
+  drawFireflies,
+  drawGeode,
   drawHerbPlant,
+  drawIronwood,
   drawLanternPost,
   drawLandmark,
+  drawMapTable,
   drawMushroomCluster,
+  drawPlanter,
+  drawSeat,
+  drawShelter,
+  drawSlashArc,
+  drawSporeShot,
+  drawStandingStone,
+  drawTelegraphRing,
   drawTreeOverlay,
+  drawWorkbench,
 } from './art.js';
+import { ENEMIES } from './combat.js';
 
 const ASSETS = {
   grass: 'assets/environment/grass.png',
@@ -67,7 +92,45 @@ const PARTICLES = {
     life: 1.1,
     count: 6,
   },
+  // Combat feedback. High priority: they are the only cue some hits get.
+  slash: {
+    colors: ['#f4f7e2', '#dfe8c2', '#ffffff'],
+    gravity: 0,
+    spread: 90,
+    life: 0.3,
+    count: 6,
+  },
+  hit: {
+    colors: ['#ffe2b0', '#f2b46a', '#ffffff'],
+    gravity: 60,
+    spread: 120,
+    life: 0.42,
+    count: 8,
+  },
+  blood: {
+    colors: ['#8f4a44', '#b0605a', '#5d3a36'],
+    gravity: 150,
+    spread: 70,
+    life: 0.5,
+    count: 7,
+  },
+  spore: {
+    colors: ['#d8bfae', '#a8524c', '#f0e2c8'],
+    gravity: 22,
+    spread: 58,
+    life: 0.7,
+    count: 7,
+  },
+  echo: {
+    colors: ['#bfe8d0', '#8fd8b0', '#eaf7e6'],
+    gravity: -6,
+    spread: 46,
+    life: 0.8,
+    count: 8,
+  },
 };
+const HIGH_PRIORITY_PARTICLES = new Set(['slash', 'hit', 'blood', 'spore', 'spark', 'ember']);
+const LOW_PRIORITY_PARTICLES = new Set(['petal', 'leaf', 'dust']);
 const MAX_PARTICLES_HIGH = 180;
 const MAX_PARTICLES_MEDIUM = 120;
 const MAX_PARTICLES_LOW = 60;
@@ -108,11 +171,12 @@ export class Renderer {
     this.images = {};
     this.frames = {};
     this.effects = [];
+    this.combatFx = [];
     this.particles = [];
     this.decorationCache = new WeakMap();
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.lastFrame = null;
-    this.stats = { entities: 0, structures: 0, particles: 0, lights: 0 };
+    this.stats = { entities: 0, structures: 0, particles: 0, lights: 0, enemies: 0 };
     this.light = surface(1, 1);
     this.prefersReducedMotion = globalThis.matchMedia
       ? matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -235,6 +299,8 @@ export class Renderer {
     this.light.width = this.canvas.width;
     this.light.height = this.canvas.height;
     this.ctx.imageSmoothingEnabled = false;
+    this.vignette = {};
+    this.campWash = null;
   }
   screenToWorld(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
@@ -255,9 +321,16 @@ export class Renderer {
     if (!style || !this.motionEffects || !this.settings.particles) return;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const cap = this.particleCap;
-    // Decorative bursts yield to gameplay feedback when the pool is full.
-    if (this.particles.length >= cap && (kind === 'petal' || kind === 'leaf')) return;
-    const count = Math.min(style.count, cap - this.particles.length);
+    // Ambient decoration yields to gameplay feedback when the pool is full:
+    // a hit that cannot be seen is worse than a leaf that is not drawn.
+    if (this.particles.length >= cap) {
+      if (LOW_PRIORITY_PARTICLES.has(kind)) return;
+      const droppable = this.particles.findIndex((p) => LOW_PRIORITY_PARTICLES.has(p.kind));
+      if (droppable >= 0) this.particles.splice(droppable, 1);
+      else if (!HIGH_PRIORITY_PARTICLES.has(kind)) return;
+      else this.particles.shift();
+    }
+    const count = Math.min(style.count, Math.max(0, cap - this.particles.length));
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2,
         speed = style.spread * (0.35 + Math.random() * 0.65);
@@ -293,6 +366,7 @@ export class Renderer {
   }
   reset() {
     this.effects.length = 0;
+    this.combatFx.length = 0;
     this.particles.length = 0;
     this.cameraInit = false;
     this.trauma = 0;
@@ -345,6 +419,8 @@ export class Renderer {
     ctx.fillStyle = this.ground || '#435b3d';
     ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
     this.drawGround(game, bounds);
+    this.drawCampGround(game, time);
+    this.drawTelegraphs(game, time);
     if (target && !menu && !game.placement) {
       ctx.strokeStyle = '#d7dea280';
       ctx.lineWidth = 1;
@@ -352,9 +428,20 @@ export class Renderer {
       ctx.ellipse(target.x, target.y + 2, 26, 12, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+    const enemies = menu || !game.enemies ? [] : game.enemies.enemies;
     const objects = [
       ...world,
-      ...landmarks.map((l) => ({ ...l, remaining: 1 })),
+      ...landmarks.map((l) => ({ ...l, remaining: 1, landmark: true })),
+      ...enemies
+        .filter(
+          (enemy) =>
+            enemy.alive &&
+            enemy.x > bounds.x - 140 &&
+            enemy.x < bounds.x + bounds.width + 140 &&
+            enemy.y > bounds.y - 160 &&
+            enemy.y < bounds.y + bounds.height + 200,
+        )
+        .map((enemy) => ({ type: 'enemy', x: enemy.x, y: enemy.y, enemy })),
       ...game.world.structures.filter(
         (s) =>
           s.x > bounds.x - 100 &&
@@ -367,11 +454,16 @@ export class Renderer {
     objects.sort((a, b) => a.y - b.y);
     for (const obj of objects) {
       try {
-        if (obj.type === 'player') this.drawPlayer(p, game.torchLit, time);
+        if (obj.type === 'player') this.drawPlayer(p, game.torchLit, time, game);
+        else if (obj.type === 'enemy') this.drawEnemy(obj.enemy, time);
         else this.drawEntity(obj, time, p, game);
       } catch {
         // One broken decoration must never kill the whole frame.
       }
+    }
+    if (!menu && game.enemies) {
+      this.drawEnemyBars(enemies, time);
+      this.drawProjectiles(game, time);
     }
     if (game.placement && placement && !menu) {
       const valid = game.canPlace(placement.x, placement.y);
@@ -391,16 +483,20 @@ export class Renderer {
     this.drawGrading(game, menu);
     if (!menu && getDayInfo(game.elapsed).nightFactor > 0.45) this.drawStars(game, time);
     this.drawLight(game, menu, time);
-    this.drawWeather(game, time, menu);
+    this.drawWeather(game, time, menu, camX, camY);
+    if (!menu) this.drawEventLayer(game, time, camX, camY);
+    this.drawWarmth(game, menu, time);
     if (this.motionEffects) this.drawAtmosphere(game, time, menu);
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(-camX, -camY);
+    this.drawCombatFx(game, time);
     this.drawParticles();
     this.drawEffects(time);
     ctx.restore();
     this.updateParticles(dt);
-    this.stats.entities = world.length + landmarks.length;
+    this.stats.enemies = game.enemies ? game.enemies.enemiesActive : 0;
+    this.stats.entities = world.length + landmarks.length + this.stats.enemies;
     this.stats.structures = game.world.structures.length;
   }
   // A light hand on colour: warm when the sun is low, cool and dim at night.
@@ -428,6 +524,14 @@ export class Renderer {
     }
     if (!menu && (weather.type === 'cloud' || weather.type === 'rain')) {
       ctx.fillStyle = `rgba(60, 75, 90, ${(0.1 * weather.intensity).toFixed(4)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+    // A world event is a mood, so it only ever tints the existing grading.
+    const event = menu || !game.worldEvent ? null : game.worldEvent();
+    if (event && event.darkness !== 0) {
+      const dark = event.darkness * (0.6 + event.intensity * 0.4);
+      ctx.fillStyle =
+        dark < 0 ? `rgba(255,236,190,${(-dark).toFixed(4)})` : `rgba(30,40,55,${dark.toFixed(4)})`;
       ctx.fillRect(0, 0, this.width, this.height);
     }
   }
@@ -723,6 +827,24 @@ export class Renderer {
       drawMushroomCluster(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 2, time);
     } else if (type === 'herb') {
       drawHerbPlant(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 2, time);
+    } else if (type === 'ironwood') {
+      drawIronwood(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 3, time);
+    } else if (type === 'geode') {
+      drawGeode(ctx, x, y, entity.variant ?? 0.5, entity.remaining ?? 3, time);
+    } else if (type === 'workbench') {
+      drawWorkbench(ctx, x, y, time);
+    } else if (type === 'shelter') {
+      drawShelter(ctx, x, y, time);
+    } else if (type === 'maptable') {
+      drawMapTable(ctx, x, y, time);
+    } else if (type === 'beacon') {
+      drawBeacon(ctx, x, y, time, !!game?.flags?.beaconLit);
+    } else if (type === 'seat') {
+      drawSeat(ctx, x, y);
+    } else if (type === 'planter') {
+      drawPlanter(ctx, x, y, time);
+    } else if (type === 'standingStone') {
+      drawStandingStone(ctx, x, y, entity.variant ?? 0.5);
     } else if (type === 'crystal') {
       if (entity.remaining === 0) {
         ctx.fillStyle = '#4a524866';
@@ -789,6 +911,10 @@ export class Renderer {
         ctx.fillStyle = '#48523b';
         ctx.fillRect(x + dx - 1, y - 23, 2, 2);
       }
+    } else if (type === 'ancientGrove') {
+      const night = game ? getDayInfo(game.elapsed).isNight : false;
+      drawAncientGrove(ctx, x, y, entity.variant ?? 0.5, time, night, !!game?.flags?.groveCleared);
+      this.drawGroveArches(ctx, x, y, time);
     } else if (
       type === 'stoneCircle' ||
       type === 'oldCamp' ||
@@ -809,10 +935,45 @@ export class Renderer {
       }
     }
   }
-  drawPlayer(player, torchLit, time) {
+  drawPlayer(player, torchLit, time, game = null) {
     const ctx = this.ctx,
       { x, y } = player;
-    this.shadow(x, y, 14, 6);
+    // A dodge is drawn as a low, committed roll, so the i-frame window stays
+    // visible even when the player is surrounded.
+    const rolling = (player.dodge ?? 0) > 0;
+    this.shadow(x, y, rolling ? 18 : 14, rolling ? 4 : 6);
+    if (rolling) {
+      const progress = Math.min(1, 1 - (player.dodge ?? 0) / DODGE_DURATION);
+      ctx.save();
+      ctx.globalAlpha = 0.3 * (1 - progress);
+      ctx.fillStyle = '#e8e2c8';
+      ctx.beginPath();
+      ctx.ellipse(x - (player.dodgeX ?? 0) * 16, y - 14, 13 - progress * 4, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(x, y - 14);
+      ctx.rotate(((player.dodgeX ?? 0) >= 0 ? 1 : -1) * progress * Math.PI * 2);
+      this.drawPlayerBody(player, time, -14);
+      ctx.restore();
+      this.drawSwing(player, game);
+      return;
+    }
+    this.drawPlayerBody(player, time, 0);
+    if (torchLit) {
+      ctx.fillStyle = '#8d7245';
+      ctx.fillRect(x + 15, y - 28, 3, 17);
+      ctx.fillStyle = '#efc97f';
+      ctx.beginPath();
+      ctx.ellipse(x + 16, y - 33, 4, 7 + Math.sin(time / 150), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    this.drawSwing(player, game);
+  }
+  drawPlayerBody(player, time, offsetY) {
+    const ctx = this.ctx,
+      x = player.x,
+      y = player.y + offsetY;
     const frame = this.frames[player.direction]?.[player.frame];
     if (this.images.player && frame) {
       const width = frame.sw * 0.34,
@@ -837,15 +998,24 @@ export class Renderer {
       ctx.fillRect(x - 8, y - 8, 6, 10);
       ctx.fillRect(x + 2, y - 8, 6, 10);
     }
-    if (torchLit) {
-      ctx.fillStyle = '#8d7245';
-      ctx.fillRect(x + 15, y - 28, 3, 17);
-      ctx.fillStyle = '#efc97f';
-      ctx.beginPath();
-      ctx.ellipse(x + 16, y - 33, 4, 7 + Math.sin(time / 150), 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
+  // The swing arc is drawn from the same numbers the hit test uses.
+  drawSwing(player, game) {
+    if (!(player.swing > 0)) return;
+    const weapon = game?.weapon ? game.weapon() : null;
+    // player.swing counts down from the attack animation length.
+    const progress = Math.min(1, Math.max(0, 1 - player.swing / (this.swingDuration ?? 0.26)));
+    const angles = { right: 0, left: Math.PI, up: -Math.PI / 2, down: Math.PI / 2 };
+    drawSlashArc(
+      this.ctx,
+      player.x,
+      player.y,
+      angles[player.direction] ?? 0,
+      progress,
+      weapon?.range ?? 52,
+    );
+  }
+
   drawLight(game, menu, time) {
     const ctx = this.ctx;
     const day = getDayInfo(game.elapsed);
@@ -854,6 +1024,10 @@ export class Renderer {
     if (!menu && (weather.type === 'cloud' || weather.type === 'rain'))
       darkness = Math.min(0.72, darkness + 0.12 * weather.intensity);
     if (!menu && weather.type === 'mist') darkness = Math.min(0.72, darkness + 0.06);
+    const event = menu || !game.worldEvent ? null : game.worldEvent();
+    if (event) darkness = Math.max(0, darkness + event.darkness * event.intensity);
+    if (!menu && game.passive?.('night_eye')) darkness *= 0.88;
+    if (!menu) darkness = Math.max(0, darkness - (this.campGlow ?? 0));
     if (darkness < 0.02) {
       this.stats.lights = 0;
       return;
@@ -890,6 +1064,42 @@ export class Renderer {
         strength: 0.95,
         distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
       }));
+    const beacons = game.world.structures
+      .filter((s) => s.type === 'beacon' && game.flags?.beaconLit && inView(s))
+      .map((s) => ({
+        x: s.x,
+        y: s.y - 92,
+        radius: 300,
+        strength: 1,
+        distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+      }));
+    const shelters = game.world.structures
+      .filter((s) => s.type === 'shelter' && inView(s))
+      .map((s) => ({
+        x: s.x,
+        y: s.y - 24,
+        radius: 120,
+        strength: 0.55,
+        distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+      }));
+    const groves =
+      game.world.generationVersion >= 3 && !menu
+        ? game.world
+            .getLandmarks({
+              x: this.camera.x - 200,
+              y: this.camera.y - 200,
+              width: this.width / this.zoom + 400,
+              height: this.height / this.zoom + 400,
+            })
+            .filter((l) => l.type === 'ancientGrove')
+            .map((s) => ({
+              x: s.x,
+              y: s.y - 20,
+              radius: 150,
+              strength: 0.6,
+              distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+            }))
+        : [];
     const shrines =
       game.world.generationVersion >= 2
         ? game.world
@@ -917,7 +1127,7 @@ export class Renderer {
         radius: game.torchLit ? 190 : 60,
         strength: game.torchLit ? 1 : 0.6,
       },
-      ...[...fires, ...lanterns, ...shrines]
+      ...[...fires, ...lanterns, ...beacons, ...shelters, ...groves, ...shrines]
         .sort((a, b) => a.distance - b.distance)
         .slice(0, this.maxLights)
         .map(({ x, y, radius, strength }) => ({ x, y, radius, strength })),
@@ -938,7 +1148,7 @@ export class Renderer {
     light.globalCompositeOperation = 'source-over';
     ctx.drawImage(this.light, 0, 0, this.width, this.height);
   }
-  drawWeather(game, time, menu) {
+  drawWeather(game, time, menu, camX = this.camera.x, camY = this.camera.y) {
     if (menu || this.quality === 'low') {
       if (menu) return;
       // Low quality still shows a hint of rain so weather stays readable.
@@ -1066,6 +1276,247 @@ export class Renderer {
       ctx.fillRect(Math.round(particle.x), Math.round(particle.y), size, size);
     }
     ctx.restore();
+  }
+
+  // ---- 5.1: creatures, combat and camp -----------------------------------
+  /** Stable per-creature variation, so one stalker never looks like the next. */
+  creatureVariant(enemy) {
+    let h = 2166136261;
+    for (let i = 0; i < enemy.id.length; i++) {
+      h ^= enemy.id.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return ((h >>> 0) % 1000) / 1000;
+  }
+  drawEnemy(enemy, time) {
+    const config = ENEMIES[enemy.type];
+    if (!config) return;
+    drawCreature(
+      this.ctx,
+      enemy.type,
+      enemy.x,
+      enemy.y,
+      this.creatureVariant(enemy),
+      {
+        state: enemy.state,
+        facing: enemy.facing,
+        flash: enemy.flash,
+        alert: enemy.alert,
+        moving: !!(enemy.vx || enemy.vy),
+      },
+      time,
+    );
+  }
+  // Health bars only appear where they carry information: an enemy that has
+  // been hit, or an elite. Nothing floats over an untouched animal.
+  drawEnemyBars(enemies, time) {
+    const ctx = this.ctx;
+    const HEIGHTS = {
+      stalker: 42,
+      guardian: 96,
+      nightling: 48,
+      sporeling: 46,
+      groveKeeper: 136,
+    };
+    for (const enemy of enemies) {
+      if (!enemy.alive || enemy.health >= enemy.maxHealth) continue;
+      const y = enemy.y - (HEIGHTS[enemy.type] ?? 46);
+      const width = enemy.elite ? 54 : 30;
+      const ratio = clamp(enemy.health / enemy.maxHealth, 0, 1);
+      ctx.fillStyle = 'rgba(12,22,18,0.62)';
+      ctx.fillRect(Math.round(enemy.x - width / 2), Math.round(y), width, enemy.elite ? 6 : 4);
+      ctx.fillStyle = enemy.elite ? '#e0836a' : '#cfd8a6';
+      ctx.fillRect(
+        Math.round(enemy.x - width / 2 + 1),
+        Math.round(y + 1),
+        (width - 2) * ratio,
+        enemy.elite ? 4 : 2,
+      );
+      if (enemy.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.5, enemy.flash)})`;
+        ctx.fillRect(Math.round(enemy.x - width / 2), Math.round(y), width, enemy.elite ? 6 : 4);
+      }
+    }
+  }
+  drawProjectiles(game, time) {
+    const shots = game.enemies?.projectiles;
+    if (!shots?.length) return;
+    const ctx = this.ctx;
+    for (const shot of shots) {
+      if (shot.type === 'sporeling') drawSporeShot(ctx, shot.x, shot.y, shot.age);
+      else {
+        ctx.fillStyle = '#d8c7a0';
+        ctx.beginPath();
+        ctx.arc(shot.x, shot.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  // Ground decals for every wind-up. This is the promise the player reacts to.
+  drawTelegraphs(game, time) {
+    if (!game.enemies?.enemies?.length) return;
+    const ctx = this.ctx;
+    for (const enemy of game.enemies.enemies) {
+      if (enemy.state !== 'windup') continue;
+      const config = ENEMIES[enemy.type];
+      if (!config) continue;
+      const progress = clamp(enemy.stateTime / config.windup, 0, 1);
+      drawTelegraphRing(
+        ctx,
+        enemy.x,
+        enemy.y,
+        config.slam?.radius ?? config.attackRange + 22,
+        progress,
+        !!config.elite,
+      );
+    }
+  }
+  addCombatFx(kind, data) {
+    if (!this.motionEffects) return;
+    if (this.combatFx.length > 24) this.combatFx.shift();
+    this.combatFx.push({ kind, born: performance.now(), ...data });
+  }
+  drawCombatFx(game, time) {
+    if (!this.combatFx.length && !this.slashes?.length) return;
+    const now = performance.now();
+    this.combatFx = this.combatFx.filter((fx) => now - fx.born < 420);
+    for (const fx of this.combatFx) {
+      const progress = clamp((now - fx.born) / (fx.ttl ?? 320), 0, 1);
+      if (fx.kind === 'slash')
+        drawSlashArc(this.ctx, fx.x, fx.y, fx.angle ?? 0, progress, fx.reach ?? 56);
+      else if (fx.kind === 'dodge') {
+        this.ctx.fillStyle = `rgba(220,228,196,${0.25 * (1 - progress)})`;
+        this.ctx.beginPath();
+        this.ctx.ellipse(fx.x, fx.y, 16 + progress * 22, 7 + progress * 8, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+  }
+  // The camp reads as settled ground even before anything is built on it.
+  drawCampGround(game, time) {
+    const home = game.home;
+    if (!home) {
+      this.campGlow = 0;
+      return;
+    }
+    const ctx = this.ctx;
+    const day = getDayInfo(game.elapsed);
+    const night = day.nightFactor;
+    if (!this.campWash || this.campWash.x !== home.x || this.campWash.y !== home.y) {
+      const gradient = ctx.createRadialGradient(home.x, home.y, 24, home.x, home.y, CAMP_RADIUS);
+      gradient.addColorStop(0, 'rgba(214,186,120,0.16)');
+      gradient.addColorStop(0.6, 'rgba(206,180,124,0.08)');
+      gradient.addColorStop(1, 'rgba(206,180,124,0)');
+      this.campWash = { x: home.x, y: home.y, gradient };
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.55 + night * 0.45;
+    ctx.fillStyle = this.campWash.gradient;
+    ctx.beginPath();
+    ctx.arc(home.x, home.y, CAMP_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // A lit beacon lifts the whole camp out of the dark.
+    this.campGlow = game.flags?.beaconLit ? 0.1 * night + 0.02 : 0;
+  }
+  // Tree trunks framing the grove, plus the shafts of light between them.
+  drawGroveArches(ctx, x, y, time) {
+    for (const side of [-1, 1]) {
+      const tx = x + side * 132;
+      ctx.fillStyle = '#3a2f24';
+      ctx.beginPath();
+      ctx.moveTo(tx - 12, y + 6);
+      ctx.quadraticCurveTo(tx - 18, y - 70, tx - side * 26, y - 108);
+      ctx.lineTo(tx - side * 12, y - 112);
+      ctx.quadraticCurveTo(tx - 2, y - 70, tx + 12, y + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#2c4f3a';
+      ctx.beginPath();
+      ctx.ellipse(tx - side * 30, y - 120, 46, 26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (this.quality === 'low') return;
+    ctx.save();
+    ctx.globalAlpha = 0.1 + Math.sin(time / 3200) * 0.02;
+    ctx.fillStyle = '#e6f5d8';
+    ctx.beginPath();
+    ctx.moveTo(x - 30, y - 150);
+    ctx.lineTo(x + 30, y - 150);
+    ctx.lineTo(x + 66, y + 10);
+    ctx.lineTo(x - 66, y + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // Cold and injury are the two states the player must never miss.
+  drawWarmth(game, menu, time) {
+    if (menu) return;
+    const ctx = this.ctx;
+    const warmth = game.player.warmth ?? 100;
+    const health = game.player.health ?? 100;
+    this.warmthPulse = (this.warmthPulse ?? 0) + 0.016;
+    if (!this.vignette.cold) {
+      const cold = ctx.createRadialGradient(
+        this.width / 2,
+        this.height / 2,
+        Math.min(this.width, this.height) * 0.28,
+        this.width / 2,
+        this.height / 2,
+        Math.max(this.width, this.height) * 0.72,
+      );
+      cold.addColorStop(0, 'rgba(120,180,220,0)');
+      cold.addColorStop(1, 'rgba(120,180,220,0.42)');
+      this.vignette.cold = cold;
+      const hurt = ctx.createRadialGradient(
+        this.width / 2,
+        this.height / 2,
+        Math.min(this.width, this.height) * 0.3,
+        this.width / 2,
+        this.height / 2,
+        Math.max(this.width, this.height) * 0.7,
+      );
+      hurt.addColorStop(0, 'rgba(150,40,40,0)');
+      hurt.addColorStop(1, 'rgba(150,40,40,0.4)');
+      this.vignette.hurt = hurt;
+    }
+    if (warmth < 45) {
+      const strength =
+        (1 - warmth / 45) * (this.reducedMotion ? 0.7 : 0.75 + Math.sin(this.warmthPulse) * 0.12);
+      ctx.save();
+      ctx.globalAlpha = clamp(strength, 0, 0.8);
+      ctx.fillStyle = this.vignette.cold;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+    if (health < 32) {
+      const strength = (1 - health / 32) * 0.85;
+      ctx.save();
+      ctx.globalAlpha = clamp(strength, 0, 0.85);
+      ctx.fillStyle = this.vignette.hurt;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+  }
+  // Fireflies and the mist surge: the two events that are pure atmosphere.
+  drawEventLayer(game, time, camX, camY) {
+    const event = game.worldEvent?.();
+    if (!event || this.quality === 'low') return;
+    if (event.type === 'fireflies') {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.scale(this.zoom, this.zoom);
+      ctx.translate(-camX, -camY);
+      drawFireflies(
+        ctx,
+        game.player.x,
+        game.player.y,
+        Math.round(10 + event.intensity * 14),
+        time,
+        game.world.seed,
+      );
+      ctx.restore();
+    }
   }
   drawEffects(time) {
     const ctx = this.ctx;

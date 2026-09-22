@@ -121,7 +121,7 @@
             ><span><kbd>B</kbd> Túi đồ</span>
           </div>
           <span id="edition-label" class="edition"
-            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v5.0</i></span
+            >THẾ GIỚI NHỎ · NHỮNG CHUYẾN ĐI LỚN <i>v5.1</i></span
           >
           >
         </footer>
@@ -167,6 +167,44 @@
               </div>
             </div>
           </div>
+          <div class="vital">
+            <span class="vital-icon warmth-color" data-icon="flame" data-size="18"></span>
+            <div class="vital-content">
+              <div class="vital-label">
+                <span>HƠI ẤM</span><strong id="warmth-value">100 <small>/ 100</small></strong>
+              </div>
+              <div
+                id="warmth-bar"
+                class="meter warmth-meter"
+                role="progressbar"
+                aria-label="Hơi ấm"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="100"
+              >
+                <span></span>
+              </div>
+            </div>
+          </div>
+          <div class="vital">
+            <span class="vital-icon stamina-color" data-icon="bolt" data-size="18"></span>
+            <div class="vital-content">
+              <div class="vital-label">
+                <span>SỨC BỀN</span><strong id="stamina-value">100 <small>/ 100</small></strong>
+              </div>
+              <div
+                id="stamina-bar"
+                class="meter stamina-meter"
+                role="progressbar"
+                aria-label="Sức bền"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="100"
+              >
+                <span></span>
+              </div>
+            </div>
+          </div>
           <div class="location-label">
             <span data-icon="pin" data-size="13"></span>
             <span id="location-name">Rừng tĩnh lặng</span>
@@ -191,14 +229,47 @@
             ></canvas>
           </div>
         </div>
-        <aside class="journal-card glass-panel" aria-label="Mục tiêu khởi đầu">
+        <aside class="journal-card glass-panel" aria-label="Nhật ký hành trình">
           <button id="journal-toggle" class="journal-heading" aria-expanded="true">
-            <span><span data-icon="leaf" data-size="17"></span> MỘT NƠI ĐỂ TRỞ VỀ</span
-            ><small id="goal-count">0/11</small>
+            <span><span data-icon="quest" data-size="17"></span> NHẬT KÝ HÀNH TRÌNH</span
+            ><small id="goal-count">0/14</small>
           </button>
+          <div id="quest-tracker" class="quest-tracker">
+            <div class="quest-tracker-head">
+              <strong id="quest-title">Đốm lửa đầu tiên</strong><small id="quest-count">0/1</small>
+            </div>
+            <p id="quest-objective">Dựng một lửa trại</p>
+            <div
+              id="quest-progress"
+              class="quest-progress"
+              role="progressbar"
+              aria-label="Tiến độ nhiệm vụ"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span></span>
+            </div>
+            <div id="quest-rewards" class="quest-rewards" hidden></div>
+          </div>
           <ol id="goal-list"></ol>
           <div id="journal-footer" class="journal-footer">Mỗi điều nhỏ bé, một khởi đầu.</div>
+          <button id="journal-open" class="text-button journal-open" aria-label="Mở nhật ký (N)">
+            <span data-icon="banner" data-size="15"></span> Mở nhật ký <kbd>N</kbd>
+          </button>
         </aside>
+        <aside id="camp-panel" class="camp-panel glass-panel" aria-label="Trại" hidden>
+          <div class="camp-head">
+            <span data-icon="tent" data-size="17"></span>
+            <strong>TRẠI CỦA BẠN</strong><small id="camp-level">Cấp 0</small>
+          </div>
+          <p id="camp-next" class="camp-next">Dựng một lửa trại để bắt đầu.</p>
+          <ul id="camp-list" class="camp-list"></ul>
+        </aside>
+        <div id="threat-badge" class="threat-badge glass-panel" role="status" hidden>
+          <span data-icon="warning" data-size="16"></span
+          ><span id="threat-text">Có gì đó đang tới</span>
+        </div>
         <div id="interaction-prompt" class="interaction-prompt" hidden>
           <kbd>E</kbd><span id="interaction-label">Hái quả mọng</span
           ><small id="interaction-detail">Giữ để tiếp tục</small>
@@ -295,8 +366,9 @@
             </button>
           </div>
           <p class="dock-hint">
-            <span><kbd>WASD</kbd> di chuyển</span><span><kbd>E</kbd> tương tác</span
-            ><span><kbd>C</kbd> chế tạo</span><span><kbd>Esc</kbd> nghỉ chân</span>
+            <span><kbd>WASD</kbd> di chuyển</span><span><kbd>Space</kbd> tấn công</span
+            ><span><kbd>Q</kbd> lăn tránh</span><span><kbd>Shift</kbd> chạy</span
+            ><span><kbd>E</kbd> tương tác</span><span><kbd>N</kbd> nhật ký</span>
           </p>
         </div>
         <div id="mobile-controls" class="mobile-controls">
@@ -307,7 +379,11 @@
             </div>
           </div>
           <div class="touch-actions">
-            <button id="touch-eat" class="touch-button touch-eat" aria-label="Ăn quả">
+            <button id="touch-attack" class="touch-button touch-attack" aria-label="Tấn công">
+              <span data-icon="sword" data-size="24"></span><small>ĐÁNH</small></button
+            ><button id="touch-dodge" class="touch-button touch-dodge" aria-label="Lăn tránh">
+              <span data-icon="bolt" data-size="22"></span><small>LĂN</small></button
+            ><button id="touch-eat" class="touch-button touch-eat" aria-label="Ăn quả">
               <span data-icon="berry" data-size="23"></span></button
             ><button id="touch-interact" class="touch-button touch-interact" aria-label="Tương tác">
               <span data-icon="hand" data-size="26"></span><small>HÁI LƯỢM</small>
@@ -430,6 +506,26 @@
       <small class="dialog-footnote">Thời gian và độ no đều tạm dừng.</small>
     </dialog>
 
+    <dialog
+      id="journal-dialog"
+      class="drawer-dialog journal-dialog"
+      aria-labelledby="journal-title"
+    >
+      <div class="drawer-header">
+        <div>
+          <span class="paper-eyebrow">NHỮNG ĐIỀU ĐANG CHỜ BẠN</span>
+          <h2 id="journal-title">Nhật ký<span>.</span></h2>
+        </div>
+        <button class="paper-icon-button" data-close aria-label="Đóng nhật ký">
+          <span data-icon="close" data-size="22"></span>
+        </button>
+      </div>
+      <p id="journal-summary" class="section-note">Một chuyến đi dài bắt đầu từ một bước chân.</p>
+      <div id="journal-list" class="journal-list"></div>
+      <footer class="drawer-footer">
+        <span class="status-dot"></span> Nhiệm vụ đã xong sẽ chờ bạn nhận thưởng ở đây.
+      </footer>
+    </dialog>
     <dialog id="help-dialog" class="paper-dialog help-dialog" aria-labelledby="help-title">
       <button class="paper-icon-button dialog-close" data-close aria-label="Đóng hướng dẫn">
         <span data-icon="close" data-size="22"></span></button
@@ -460,6 +556,24 @@
         <div>
           <kbd>5 / Esc</kbd><strong>Khi đêm xuống</strong
           ><span>Bật đuốc bằng 5. Esc để hủy xây hoặc tạm dừng. Tự lưu mỗi 15 giây.</span>
+        </div>
+        <div>
+          <kbd>Space / Q</kbd><strong>Khi rừng không hiền</strong
+          ><span
+            >Space hoặc nhấp chuột để vung tay. Q để lăn tránh, và lăn tránh không nhận sát thương.
+            Sinh vật gầm gừ trước khi lao vào — lùi lại hoặc lăn sang bên.</span
+          >
+        </div>
+        <div>
+          <kbd>Shift</kbd><strong>Chạy nhanh</strong
+          ><span>Giữ Shift để chạy. Chạy, lăn tránh và tấn công đều tiêu hao sức bền.</span>
+        </div>
+        <div>
+          <kbd>N</kbd><strong>Nhật ký hành trình</strong
+          ><span
+            >N mở nhật ký: nhiệm vụ, tiến độ và phần thưởng. Nhấn T để la bàn đổi mục tiêu khi đã có
+            năng lực Người đọc dấu rừng.</span
+          >
         </div>
         <div>
           <kbd>O / M</kbd><strong>Tuỳ chỉnh khu rừng</strong
@@ -603,10 +717,15 @@
       <span class="paper-eyebrow">HẸN GẶP LẠI, NGƯỜI LỮ KHÁCH</span>
       <h2 id="gameover-title">Một hành trình<br />khép lại.</h2>
       <p>Bạn đã kiệt sức. Nhưng khu rừng vẫn còn<br />rất nhiều câu chuyện đang đợi.</p>
+      <p class="section-note">
+        Bạn tỉnh dậy bên lửa nhà, mang theo mọi thứ đã học được. Chuyến đi vẫn còn nguyên.
+      </p>
       <div id="journey-stats" class="journey-stats"></div>
       <div class="dialog-buttons">
-        <button id="restart-button" class="button button-dark">
-          <span data-icon="reset" data-size="18"></span> Bắt đầu lại</button
+        <button id="revive-button" class="button button-dark">
+          <span data-icon="flame" data-size="18"></span> Tỉnh dậy ở nhà</button
+        ><button id="restart-button" class="button button-outline">
+          <span data-icon="reset" data-size="18"></span> Bắt đầu lại từ đầu</button
         ><button id="death-home-button" class="text-button">Về màn hình chính</button>
       </div>
     </dialog>

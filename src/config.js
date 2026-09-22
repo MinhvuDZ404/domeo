@@ -1,5 +1,5 @@
-export const GAME_VERSION = '5.0.0';
-export const GAME_LABEL = 'v5.0';
+export const GAME_VERSION = '5.1.0';
+export const GAME_LABEL = 'v5.1';
 
 export const DAY_LENGTH = 1440;
 export const DAY_OFFSET = DAY_LENGTH * 0.2;
@@ -9,10 +9,14 @@ export const PLAYER_SPEED = 170;
 export const INTERACTION_DISTANCE = 68;
 export const MAX_STACK = 999;
 export const MAX_STRUCTURES = 100;
-export const SAVE_VERSION = 3;
+// Three separate version numbers, deliberately never mixed up:
+//   GAME_VERSION       what the release calls itself
+//   SAVE_VERSION       the shape of the stored journey (migrated, never reset)
+//   WORLD_GEN_VERSION  the generator new journeys use (old worlds keep theirs)
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'domeo.journey.v1';
 export const LOCK_KEY = 'domeo.lock.v1';
-export const WORLD_GEN_VERSION = 2;
+export const WORLD_GEN_VERSION = 3;
 export const WORLD_LIMIT = 1_000_000;
 export const MAX_EXPLORED = 2500;
 export const MAX_DISCOVERIES = 400;
@@ -32,9 +36,78 @@ export const COOKED_HEALTH = 12;
 export const MUSHROOM_HUNGER = 15;
 export const MUSHROOM_HEALTH = 2;
 export const SALVE_HEALTH = 35;
+export const MEAL_HUNGER = 55;
+export const MEAL_HEALTH = 18;
+export const MEAL_WARMTH = 26;
+export const TEA_WARMTH = 34;
+export const TEA_HEALTH = 4;
+export const TEA_HUNGER = 10;
 
-export const UNIQUE_ITEMS = ['axe', 'pickaxe', 'torch'];
-export const PLACEABLE = ['campfire', 'wall', 'chest', 'lantern'];
+// Warmth (5.1): a slow pressure that makes night, rain and mist ask for a fire,
+// a torch or a shelter. It only ever bites below 20, so it nudges preparation
+// instead of demanding that the player stands next to a campfire all game.
+export const WARMTH_MAX = 100;
+export const WARMTH_DRAIN_NIGHT = 0.32;
+export const WARMTH_DRAIN_RAIN = 0.24;
+export const WARMTH_DRAIN_MIST = 0.12;
+export const WARMTH_COLD_HEALTH = 1.1;
+export const WARMTH_COLD_THRESHOLD = 20;
+export const WARMTH_FIRE_PER_SECOND = 9;
+export const WARMTH_SHELTER_PER_SECOND = 4;
+export const WARMTH_TORCH_PER_SECOND = 1.6;
+
+// Stamina (5.1): only sprinting, dodging and attacking spend it. Walking is free.
+export const STAMINA_MAX = 100;
+export const STAMINA_REGEN = 14;
+export const SPRINT_MULTIPLIER = 1.4;
+export const SPRINT_STAMINA_PER_SECOND = 13;
+export const DODGE_STAMINA = 24;
+export const DODGE_DURATION = 0.22;
+export const DODGE_INVULNERABILITY = 0.42;
+export const DODGE_SPEED = 520;
+export const ATTACK_STAMINA = 6;
+
+// Combat. Health, ranges and timings are shared by the player and by enemies so
+// the balance script and the browser read exactly the same numbers.
+export const PLAYER_HEALTH_MAX = 100;
+export const HIT_INVULNERABILITY = 0.85;
+export const PLAYER_HIT_COOLDOWN = 0.5;
+export const MAX_ENEMIES = 10;
+export const MAX_PROJECTILES = 24;
+export const ENEMY_AI_INTERVAL = 0.16; // Fixed 6 Hz AI tick, independent of frame rate.
+export const ENEMY_SLEEP_DISTANCE = 1150;
+export const ENEMY_LEASH_DISTANCE = 900;
+export const SPAWN_INTERVAL = 1.1;
+export const SPAWN_MIN_DISTANCE = 340;
+export const SPAWN_MAX_DISTANCE = 980;
+export const SPAWN_GRACE_SECONDS = 75; // A new journey gets quiet minutes before danger.
+export const CAMP_RADIUS = 320;
+export const CAMP_SAFE_RADIUS = 460;
+export const MAX_DAMAGE_EVENTS = 40;
+
+export const UNIQUE_ITEMS = [
+  'axe',
+  'pickaxe',
+  'axe2',
+  'pickaxe2',
+  'knife',
+  'blade',
+  'torch',
+  'ancientSeed',
+];
+export const PLACEABLE = [
+  'campfire',
+  'wall',
+  'chest',
+  'lantern',
+  'workbench',
+  'shelter',
+  'maptable',
+  'beacon',
+  'seat',
+  'planter',
+  'standingStone',
+];
 export const STAT_KEYS = [
   'berries',
   'wood',
@@ -50,6 +123,9 @@ export const STAT_KEYS = [
   'crystals',
   'landmarks',
   'nights',
+  'kills',
+  'quests',
+  'deaths',
 ];
 
 export const ITEMS = {
@@ -149,28 +225,232 @@ export const ITEMS = {
     kind: 'Công trình',
     description: 'Cất đồ khi túi đầy. Đứng gần và nhấn E để mở.',
   },
+  knife: {
+    name: 'Dao đá',
+    icon: 'sword',
+    kind: 'Vũ khí',
+    description: 'Một lưỡi đá buộc vào cán gỗ. Tự động dùng khi bạn tấn công.',
+  },
+  blade: {
+    name: 'Kiếm gỗ cổ',
+    icon: 'blade',
+    kind: 'Vũ khí',
+    description: 'Lưỡi gỗ cổ cứng như sắt. Nặng hơn, nhưng chỉ cần hai nhát.',
+  },
+  axe2: {
+    name: 'Rìu cổ',
+    icon: 'runeAxe',
+    kind: 'Công cụ',
+    description: 'Lưỡi rìu tẩm nhựa cây cổ. Chặt cây nhanh hơn và hạ được gỗ cổ.',
+  },
+  pickaxe2: {
+    name: 'Cuốc cổ',
+    icon: 'runePick',
+    kind: 'Công cụ',
+    description: 'Đầu cuốc cứng, đục được cả mạch tinh thể trong đá.',
+  },
+  ancientWood: {
+    name: 'Gỗ cổ',
+    icon: 'wood',
+    kind: 'Nguyên liệu',
+    description: 'Gỗ của những cây đã sống qua nhiều đời người. Chỉ có ở rừng sâu.',
+  },
+  fragment: {
+    name: 'Mảnh đá canh',
+    icon: 'shard',
+    kind: 'Nguyên liệu',
+    description: 'Một mảnh vỡ của người đá. Vẫn còn ấm, và vẫn còn nhớ.',
+  },
+  moonEssence: {
+    name: 'Tinh chất đêm',
+    icon: 'essence',
+    kind: 'Đặc biệt',
+    description: 'Đọng lại khi một sinh vật đêm tan đi. Sáng lấp lánh dưới trăng.',
+  },
+  meal: {
+    name: 'Bữa ăn rừng',
+    icon: 'stew',
+    kind: 'Thức ăn',
+    description: 'Một bữa nóng bên lửa. Hồi 55 no, 18 máu và sưởi ấm đôi chút.',
+  },
+  tea: {
+    name: 'Trà thảo mộc',
+    icon: 'cup',
+    kind: 'Thức ăn',
+    description: 'Nước thảo mộc ấm. Sưởi rất tốt và hồi lại toàn bộ sức bền.',
+  },
+  workbench: {
+    name: 'Bàn chế tác',
+    icon: 'bench',
+    kind: 'Công trình',
+    description: 'Nơi làm ra đồ nghề bậc cao. Đặt trong trại để mở công thức mới.',
+  },
+  shelter: {
+    name: 'Lều trú',
+    icon: 'tent',
+    kind: 'Công trình',
+    description: 'Mái che giữa rừng. Trong trại, bạn bớt hao sức vì thời tiết và nghỉ được.',
+  },
+  maptable: {
+    name: 'Bàn bản đồ',
+    icon: 'table',
+    kind: 'Công trình',
+    description: 'Trải bản đồ rừng ra. Địa danh quanh đây hiện lên và la bàn dẫn được tới.',
+  },
+  beacon: {
+    name: 'Đèn hiệu',
+    icon: 'beacon',
+    kind: 'Công trình',
+    description: 'Ngọn đèn cao soi khắp vùng. Cần hạt giống cổ để thắp lửa.',
+  },
+  seat: {
+    name: 'Ghế gỗ',
+    icon: 'seat',
+    kind: 'Trang trí',
+    description: 'Một chỗ ngồi nhỏ. Không cần lý do để có.',
+  },
+  planter: {
+    name: 'Chậu hoa',
+    icon: 'planter',
+    kind: 'Trang trí',
+    description: 'Hoa rừng trồng lại bên lối vào trại.',
+  },
+  standingStone: {
+    name: 'Đá dựng',
+    icon: 'monolith',
+    kind: 'Trang trí',
+    description: 'Một viên đá đứng. Người đi trước từng dựng đá để nhớ đường.',
+  },
+  ancientSeed: {
+    name: 'Hạt giống bình minh',
+    icon: 'seed',
+    kind: 'Cổ vật',
+    description: 'Hạt giống ngủ trong rừng cổ. Nó vẫn còn sống, và đang chờ một ngọn lửa.',
+  },
+  stoneFragment: {
+    name: 'Đá dựng cổ',
+    icon: 'monolith',
+    kind: 'Trang trí',
+    description: 'Đá cũ mang theo từ vòng đá. Dựng lại để nhớ mình đã đi qua.',
+  },
 };
 
+// Weapons are picked automatically: the strongest one you carry is used.
+export const WEAPONS = [
+  { id: 'blade', damage: 15, range: 58, cooldown: 0.44, arc: 1.9, knockback: 26 },
+  { id: 'knife', damage: 9, range: 54, cooldown: 0.4, arc: 1.7, knockback: 18 },
+  { id: 'axe2', damage: 11, range: 58, cooldown: 0.5, arc: 1.8, knockback: 24 },
+  { id: 'axe', damage: 7, range: 52, cooldown: 0.48, arc: 1.6, knockback: 16 },
+  { id: 'pickaxe2', damage: 9, range: 54, cooldown: 0.52, arc: 1.6, knockback: 20 },
+  { id: 'pickaxe', damage: 6, range: 50, cooldown: 0.5, arc: 1.5, knockback: 14 },
+];
+export const FIST = { id: 'fist', damage: 5, range: 46, cooldown: 0.46, arc: 1.5, knockback: 12 };
+export const bestWeapon = (inventory) =>
+  WEAPONS.find((weapon) => (inventory[weapon.id] ?? 0) > 0) ?? FIST;
+
+// Recipes. `station` means the player must stand near that built structure;
+// `requires` is a quest-granted blueprint (see src/quests.js). Everything that
+// existed in 5.0 keeps working without a station or a blueprint.
 export const RECIPES = [
-  { id: 'axe', costs: { wood: 4, stone: 2 }, unique: true },
-  { id: 'pickaxe', costs: { wood: 3, stone: 4 }, unique: true },
-  { id: 'campfire', costs: { wood: 6, stone: 4 } },
-  { id: 'torch', costs: { wood: 3, fiber: 2 }, unique: true },
-  { id: 'wall', costs: { wood: 4 } },
-  { id: 'chest', costs: { wood: 6, fiber: 2 } },
-  { id: 'salve', costs: { mushroom: 2, herb: 1 } },
-  { id: 'lantern', costs: { wood: 4, fiber: 2, crystal: 1 } },
+  { id: 'axe', costs: { wood: 4, stone: 2 }, unique: true, group: 'tools' },
+  { id: 'pickaxe', costs: { wood: 3, stone: 4 }, unique: true, group: 'tools' },
+  { id: 'knife', costs: { wood: 3, stone: 2, fiber: 2 }, unique: true, group: 'tools' },
+  { id: 'campfire', costs: { wood: 6, stone: 4 }, group: 'camp' },
+  { id: 'torch', costs: { wood: 3, fiber: 2 }, unique: true, group: 'tools' },
+  { id: 'wall', costs: { wood: 4 }, group: 'camp' },
+  { id: 'chest', costs: { wood: 6, fiber: 2 }, group: 'camp' },
+  { id: 'salve', costs: { mushroom: 2, herb: 1 }, group: 'survival' },
+  { id: 'lantern', costs: { wood: 4, fiber: 2, crystal: 1 }, group: 'camp' },
+  { id: 'meal', costs: { berry: 1, mushroom: 1, herb: 1 }, station: 'campfire', group: 'survival' },
+  { id: 'tea', costs: { herb: 2, berry: 1 }, station: 'campfire', group: 'survival' },
+  { id: 'seat', costs: { wood: 2 }, group: 'decor' },
+  { id: 'planter', costs: { wood: 2, fiber: 1 }, group: 'decor' },
+  { id: 'standingStone', costs: { stone: 3 }, group: 'decor' },
+  {
+    id: 'workbench',
+    costs: { wood: 10, stone: 6, fiber: 2 },
+    requires: 'recipe:workbench',
+    group: 'camp',
+  },
+  { id: 'shelter', costs: { wood: 12, stone: 2, fiber: 6 }, group: 'camp' },
+  {
+    id: 'maptable',
+    costs: { wood: 8, ancientWood: 1, fiber: 2 },
+    station: 'workbench',
+    requires: 'recipe:maptable',
+    group: 'camp',
+  },
+  {
+    id: 'axe2',
+    costs: { wood: 6, ancientWood: 2, crystal: 1 },
+    unique: true,
+    station: 'workbench',
+    group: 'tools',
+  },
+  {
+    id: 'pickaxe2',
+    costs: { wood: 6, ancientWood: 2, stone: 8 },
+    unique: true,
+    station: 'workbench',
+    group: 'tools',
+  },
+  {
+    id: 'blade',
+    costs: { ancientWood: 2, fragment: 1, fiber: 3 },
+    unique: true,
+    station: 'workbench',
+    requires: 'recipe:blade',
+    group: 'tools',
+  },
+  {
+    id: 'beacon',
+    costs: { stone: 8, ancientWood: 3, fragment: 2, moonEssence: 2, crystal: 2 },
+    station: 'workbench',
+    requires: 'recipe:beacon',
+    group: 'camp',
+  },
+];
+
+export const RECIPE_GROUPS = [
+  { id: 'survival', label: 'Sinh tồn' },
+  { id: 'tools', label: 'Đồ nghề' },
+  { id: 'camp', label: 'Trại' },
+  { id: 'decor', label: 'Trang trí' },
 ];
 
 export const RESOURCES = {
   bush: { charges: 3, respawn: 18, label: 'Hái quả mọng', icon: 'berry' },
   branch: { charges: 1, respawn: 45, label: 'Nhặt cành khô', icon: 'wood' },
   pebble: { charges: 1, respawn: 45, label: 'Nhặt đá cuội', icon: 'stone' },
-  tree: { charges: 3, respawn: 120, label: 'Chặt cây', tool: 'axe', icon: 'axe' },
-  rock: { charges: 3, respawn: 90, label: 'Khai thác đá', tool: 'pickaxe', icon: 'pickaxe' },
+  tree: {
+    charges: 3,
+    respawn: 120,
+    label: 'Chặt cây',
+    tool: 'axe',
+    bonus: { tool: 'axe2', amount: 3 },
+    icon: 'axe',
+  },
+  rock: {
+    charges: 3,
+    respawn: 90,
+    label: 'Khai thác đá',
+    tool: 'pickaxe',
+    bonus: { tool: 'pickaxe2', amount: 3 },
+    icon: 'pickaxe',
+  },
   mushroom: { charges: 2, respawn: 70, label: 'Hái nấm rừng', icon: 'mushroom' },
   herb: { charges: 2, respawn: 60, label: 'Hái thảo mộc', icon: 'herb' },
   crystal: { charges: 2, respawn: 300, label: 'Gỡ tinh thể', tool: 'pickaxe', icon: 'crystal' },
+  // 5.1 nodes. They only grow far from home and both ask for an upgraded tool,
+  // so a better axe/pickaxe opens new ground instead of just ticking faster.
+  ironwood: { charges: 3, respawn: 200, label: 'Chặt gỗ cổ', tool: 'axe2', icon: 'wood' },
+  geode: {
+    charges: 3,
+    respawn: 260,
+    label: 'Đục mạch tinh thể',
+    tool: 'pickaxe2',
+    icon: 'crystal',
+  },
 };
 
 // Biome palettes for generation v2. Generation v1 keeps the original look.
@@ -256,9 +536,25 @@ export const LANDMARKS = {
     hint: 'Một khối đá sừng sững. Có mạch tinh thể lấp lánh.',
     reward: { stone: 4, crystal: 1 },
   },
+  // Generation v3 only. Kept out of LANDMARK_TYPES on purpose so already
+  // generated v2 worlds can never sprout one.
+  ancientGrove: {
+    name: 'Rừng cổ',
+    hint: 'Thân cây cao hơn cả trí nhớ. Giữa vòng cây, một hạt giống đang ngủ.',
+    reward: { ancientSeed: 1, fragment: 1 },
+  },
 };
 
-export const LANDMARK_TYPES = Object.keys(LANDMARKS);
+// Frozen: the landmark pool of generation v2, in the order it has always used.
+export const LANDMARK_TYPES = [
+  'stoneCircle',
+  'oldCamp',
+  'shrine',
+  'ancientTree',
+  'pond',
+  'giantRock',
+];
+export const GROVE_TYPE = 'ancientGrove';
 export const DISCOVERY_RADIUS = 150;
 
 export const emptyItems = () => Object.fromEntries(Object.keys(ITEMS).map((key) => [key, 0]));

@@ -9,6 +9,18 @@ const NOTES = {
   death: [280, 220, 160],
   discovery: [523, 659, 784, 1047],
   message: [660],
+  // 5.1: combat and progression. Short, low-count, nothing per frame.
+  hit: [180, 120],
+  playerHurt: [140, 96],
+  enemyDeath: [420, 300, 210],
+  dodge: [560, 380],
+  quest: [659, 880],
+  questComplete: [523, 659, 880, 1047],
+  questClaimed: [587, 740, 988],
+  upgrade: [392, 523, 659, 784],
+  beacon: [349, 466, 587, 698, 880],
+  rest: [330, 440],
+  rally: [196, 262, 330],
 };
 const CHIRPS = [
   [1180, 1520],
@@ -25,6 +37,20 @@ const COOLDOWNS = {
   deny: 200,
   discovery: 500,
   message: 0,
+  swing: 130,
+  hit: 70,
+  playerHurt: 320,
+  enemyDeath: 90,
+  telegraph: 180,
+  enemyNotice: 260,
+  dodge: 220,
+  quest: 400,
+  questComplete: 300,
+  questClaimed: 400,
+  upgrade: 400,
+  beacon: 800,
+  rest: 400,
+  rally: 1500,
 };
 
 export class Sound {
@@ -366,6 +392,110 @@ export class Sound {
       };
     } catch {}
   }
+  // A short filtered noise burst: impacts, swings, rustles.
+  noiseBurst(frequency, gainLevel, seconds, filterQ = 0.7) {
+    if (!this.context || !this.master || this.context.state !== 'running') return;
+    try {
+      const context = this.context;
+      const source = context.createBufferSource();
+      source.buffer = this.buildNoiseBuffer();
+      const filter = context.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = frequency;
+      filter.Q.value = Math.max(0.3, filterQ * 6);
+      const gain = context.createGain();
+      const start = context.currentTime;
+      gain.gain.setValueAtTime(gainLevel, start);
+      gain.gain.exponentialRampToValueAtTime(0.0008, start + seconds);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.master);
+      source.start(start);
+      source.stop(start + seconds + 0.02);
+      source.onended = () => {
+        source.disconnect();
+        filter.disconnect();
+        gain.disconnect();
+      };
+    } catch {
+      // Audio is optional; a failed burst must never interrupt play.
+    }
+  }
+  // A tone that slides from one pitch to another (cues and alerts).
+  glide(from, to, seconds, gainLevel, shape = 'sine') {
+    if (!this.context || !this.master || this.context.state !== 'running') return;
+    try {
+      const context = this.context;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = context.currentTime;
+      oscillator.type = shape;
+      oscillator.frequency.setValueAtTime(from, start);
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(40, to), start + seconds);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(gainLevel, start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0008, start + seconds);
+      oscillator.connect(gain);
+      gain.connect(this.master);
+      oscillator.start(start);
+      oscillator.stop(start + seconds + 0.02);
+      oscillator.onended = () => {
+        oscillator.disconnect();
+        gain.disconnect();
+      };
+    } catch {
+      // Ignored on purpose.
+    }
+  }
+  /**
+   * A quiet tension bed while something dangerous is close. One oscillator,
+   * one gain: the cost is constant no matter how many creatures are around.
+   */
+  setDanger(level = 0) {
+    const target = Math.min(1, Math.max(0, Number(level) || 0));
+    this.dangerLevel = target;
+    if (target <= 0.02) {
+      this.stopDanger();
+      return;
+    }
+    if (!this.enabled || this.hidden || !this.context || !this.master) return;
+    if (this.context.state !== 'running') return;
+    if (!this.dangerNodes) {
+      try {
+        const oscillator = this.context.createOscillator();
+        const gain = this.context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 58;
+        gain.gain.value = 0;
+        oscillator.connect(gain);
+        gain.connect(this.master);
+        oscillator.start();
+        this.dangerNodes = { sources: [oscillator], extra: [gain], gain };
+      } catch {
+        this.dangerNodes = null;
+        return;
+      }
+    }
+    try {
+      this.dangerNodes.gain.gain.setTargetAtTime(target * 0.075, this.context.currentTime, 0.6);
+    } catch {
+      this.dangerNodes.gain.gain.value = target * 0.075;
+    }
+  }
+  stopDanger() {
+    const node = this.dangerNodes;
+    if (!node) return;
+    this.dangerNodes = null;
+    for (const source of node.sources) {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch {
+        // Already gone.
+      }
+    }
+    for (const part of [node.gain, ...node.extra]) part?.disconnect?.();
+  }
   play(type, data = {}) {
     if (!this.enabled || !this.context || !this.master || this.context.state !== 'running') return;
     const now = performance.now();
@@ -374,6 +504,36 @@ export class Sound {
     this.lastPlay.set(type, now);
     if (type === 'step') {
       this.footstep(data.surface);
+      return;
+    }
+    // Combat has its own voice: noise for swings and impacts, tones for cues.
+    if (type === 'swing') {
+      this.noiseBurst(1200, 0.05, 0.05, 0.12);
+      return;
+    }
+    if (type === 'enemyStrike' || type === 'hit') {
+      this.noiseBurst(type === 'hit' ? 900 : 420, 0.06, 0.07, 0.16);
+      return;
+    }
+    if (type === 'enemyTelegraph') {
+      // A rising cue, so a wind-up is audible even off screen.
+      this.glide(data.elite ? 220 : 320, data.elite ? 520 : 620, 0.16, 0.1, 'triangle');
+      return;
+    }
+    if (type === 'enemyNotice') {
+      this.glide(520, 380, 0.12, 0.05, 'sine');
+      return;
+    }
+    if (type === 'playerHurt') {
+      this.noiseBurst(200, 0.14, 0.1, 0.22);
+      return;
+    }
+    if (type === 'dodge') {
+      this.noiseBurst(1600, 0.055, 0.08, 0.14);
+      return;
+    }
+    if (type === 'spore') {
+      this.noiseBurst(700, 0.05, 0.05, 0.2);
       return;
     }
     if (type === 'gather' && data.item === 'crystal') {
@@ -392,6 +552,7 @@ export class Sound {
     });
   }
   stopAmbient() {
+    this.stopDanger();
     this.clearChirp();
     this.clearCricket();
     this.clearCrackle();
