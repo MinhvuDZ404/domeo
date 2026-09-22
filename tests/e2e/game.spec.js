@@ -38,8 +38,8 @@ test('title, keyboard movement, pause/resume, help and locally served assets', a
   await ready(page);
   await expect(page).toHaveTitle('Domeo — Một chuyến đi hoang dã');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Đi lạc một chút.');
-  await expect(page.locator('#edition-label')).toContainText('v5.0');
-  await expect(page.locator('#edition-label i')).toHaveText('v5.0');
+  await expect(page.locator('#edition-label')).toContainText('v5.1');
+  await expect(page.locator('#edition-label i')).toHaveText('v5.1');
   await expect(page.locator('#continue-button')).toBeHidden();
   await page.locator('#help-button').click();
   await expect(page.locator('#help-dialog')).toBeVisible();
@@ -191,7 +191,11 @@ test('walking to a landmark celebrates the discovery and remembers it', async ({
   await restore(page, game.snapshot());
   await expect(page.locator('#toast-region')).toContainText('Đã khám phá', { timeout: 8000 });
   await expect(page.locator('#journal-footer')).toContainText('1 địa danh');
-  await expect(page.locator('#goal-count')).not.toHaveText('0/11');
+  // The tracker keeps showing the first step of the main journey, and the
+  // journal counts every quest, not just the ones already opened.
+  await expect(page.locator('#quest-title')).toHaveText('Đốm lửa đầu tiên');
+  await expect(page.locator('#quest-count')).toHaveText('0/1');
+  await expect(page.locator('#goal-count')).toHaveText('0/14');
   expect((await saved(page)).discovered.length).toBe(1);
   expect(errors).toEqual([]);
 });
@@ -611,6 +615,39 @@ test.describe('touchscreen', () => {
       );
     }
   });
+
+  test('the touch controls can fight too: attack and dodge buttons', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await fresh(page);
+    const spawned = await placeCreature(page, 'stalker', 50, 0);
+    await expect(page.locator('#touch-attack')).toBeVisible();
+    await page.locator('#touch-attack').tap();
+    await expect
+      .poll(() =>
+        page.evaluate(({ id }) => {
+          const enemy = window.__domeo.game().enemies.enemies.find((e) => e.id === id);
+          return enemy ? enemy.health : 0;
+        }, spawned),
+      )
+      .toBeLessThan(spawned.health);
+    // The dodge button rolls the player, which shows up as a jump in space.
+    await expect(page.locator('#touch-dodge')).toBeVisible();
+    const position = await page.evaluate(() => {
+      const p = window.__domeo.game().player;
+      return Math.hypot(p.x, p.y);
+    });
+    await page.locator('#touch-dodge').tap();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const p = window.__domeo.game().player;
+          return Math.hypot(p.x, p.y);
+        }),
+      )
+      .toBeGreaterThan(position + 8);
+    expect(errors).toEqual([]);
+  });
 });
 
 test('autosave runs after fifteen simulation seconds without user intervention', async ({
@@ -635,5 +672,291 @@ test('sound toggle reflects its real state and can be switched off again', async
   await expect(page.locator('#sound-button')).toHaveAttribute('aria-label', 'Tắt âm thanh');
   await page.locator('#sound-button').click();
   await expect(page.locator('#sound-button')).toHaveAttribute('aria-pressed', 'false');
+  expect(errors).toEqual([]);
+});
+
+// ---- 5.1: the loop, in a real browser ------------------------------------
+/**
+ * Places a creature next to the player through the diagnostics surface. The
+ * spawn director is deliberately slow and random, so tests ask for the fight
+ * they want instead of waiting for one to happen to them.
+ */
+async function placeCreature(page, type, dx = 52, dy = 0) {
+  return page.evaluate(
+    ({ type, dx, dy }) => {
+      const game = window.__domeo.game();
+      game.enemies.clearNear(game.player.x, game.player.y, 5000);
+      const enemy = game.enemies.spawn(type, game.player.x + dx, game.player.y + dy);
+      // Turn to face the creature: swings follow the facing direction, so this
+      // is the difference between a test that measures combat and one that
+      // measures a player staring at a tree.
+      if (Math.abs(dx) >= Math.abs(dy)) game.player.direction = dx >= 0 ? 'right' : 'left';
+      else game.player.direction = dy >= 0 ? 'down' : 'up';
+      return { id: enemy.id, health: enemy.health };
+    },
+    { type, dx, dy },
+  );
+}
+
+test('a creature can be seen, heard and killed, and the kill leaves loot', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await fresh(page);
+  const spawned = await placeCreature(page, 'stalker', 46, 0);
+  // The danger badge is the promise that something noticed the player.
+  await expect(page.locator('#threat-badge')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#threat-text')).toContainText('Kẻ rình rừng', { timeout: 8000 });
+  // Attack until it dies; the first swings may miss if it is still closing in.
+  const killed = await page.evaluate(async ({ id }) => {
+    const game = window.__domeo.game();
+    const enemy = game.enemies.enemies.find((e) => e.id === id);
+    for (let i = 0; i < 200 && enemy.alive; i++) {
+      game.player.direction = 'right';
+      game.cooldown = 0;
+      game.player.stamina = 100;
+      game.attack({ x: 1, y: 0 });
+      enemy.x = game.player.x + 40;
+      enemy.y = game.player.y;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    return { alive: enemy.alive, kills: game.stats.kills, health: game.player.health };
+  }, spawned);
+  expect(killed.alive).toBe(false);
+  expect(killed.kills).toBe(1);
+  await expect(page.locator('#toast-region')).toContainText('Đã hạ', { timeout: 6000 });
+  const data = await saved(page);
+  expect(data.stats.kills).toBe(1);
+  // Loot is real: the stalker drops fibre and sometimes berries.
+  expect(data.inventory.fiber).toBeGreaterThan(0);
+  // The tension bed follows the danger: it rises with a creature closing in,
+  // and it stops the moment the world does.
+  await placeCreature(page, 'stalker', 60, 0);
+  await expect
+    .poll(() => page.evaluate(() => window.__domeo.sound.dangerLevel ?? 0))
+    .toBeGreaterThan(0);
+  await page.locator('#pause-button').click();
+  await expect(page.locator('#pause-dialog')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__domeo.sound.dangerLevel ?? 0)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('attacking and dodging cost stamina, and dodging keeps the player alive', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await fresh(page);
+  await placeCreature(page, 'stalker', 60, 0);
+  const stamina = async () =>
+    Number((await page.locator('#stamina-bar').getAttribute('aria-valuenow')) ?? '0');
+  const before = await stamina();
+  await page.keyboard.press('Space');
+  await expect.poll(stamina).toBeLessThan(before);
+  // A dodge is a real movement, and it spends a big chunk of stamina.
+  const afterSwing = await stamina();
+  const position = await page.evaluate(() => window.__domeo.game().player.x);
+  // Q with no direction rolls where the player is facing; holding D makes the
+  // roll directional, which is what the assertion below measures.
+  await page.keyboard.down('KeyD');
+  await page.keyboard.press('KeyQ');
+  await expect.poll(stamina).toBeLessThan(afterSwing);
+  await expect
+    .poll(() => page.evaluate(() => window.__domeo.game().player.x))
+    .toBeGreaterThan(position);
+  await page.keyboard.up('KeyD');
+  // While rolling, nothing can land a hit.
+  const rolling = await page.evaluate(() => {
+    const game = window.__domeo.game();
+    game.player.stamina = 100;
+    game.dodge({ x: -1, y: 0 });
+    const enemy = game.enemies.spawn('stalker', game.player.x - 30, game.player.y);
+    const blocked = game.enemies.damagePlayer(30, enemy);
+    return { blocked, health: game.player.health, invulnerable: game.enemies.invulnerable };
+  });
+  expect(rolling.blocked).toBe(false);
+  expect(rolling.invulnerable).toBe(true);
+  expect(rolling.health).toBe(100);
+  await expect(page.locator('#stamina-value')).not.toHaveText('100 / 100');
+  expect(errors).toEqual([]);
+});
+
+test('the camp panel grows as the camp is built, tier by tier', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  game.inventory.wood = 40;
+  game.inventory.stone = 40;
+  game.inventory.fiber = 12;
+  game.world.structures.push({ id: 'built:0', type: 'campfire', x: 40, y: 0 });
+  game.home = { x: 40, y: 0 };
+  await restore(page, game.snapshot());
+  await expect(page.locator('#camp-panel')).toBeVisible();
+  await expect(page.locator('#camp-level')).toHaveText('Cấp 1');
+  await expect(page.locator('#camp-next')).toContainText('Mái che');
+  // Build a shelter next: the panel must notice without a reload.
+  await page.evaluate(() => {
+    const live = window.__domeo.game();
+    live.world.structures.push({ id: 'built:1', type: 'shelter', x: -30, y: 40 });
+  });
+  await expect(page.locator('#camp-level')).toHaveText('Cấp 2', { timeout: 4000 });
+  await expect(page.locator('.camp-item.built')).toHaveCount(2);
+  expect(errors).toEqual([]);
+});
+
+test('the quest journal is a loop: objective, reward, then a new recipe', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await fresh(page);
+  // The first quest asks for a fire and a roasted berry.
+  await expect(page.locator('#quest-title')).toHaveText('Đốm lửa đầu tiên');
+  await expect(page.locator('#quest-objective')).toHaveText('Dựng một lửa trại');
+  await page.evaluate(() => {
+    const game = window.__domeo.game();
+    game.inventory.wood = 30;
+    game.inventory.stone = 20;
+    game.inventory.berry = 3;
+  });
+  // Craft the campfire the way a player would, then put it down.
+  await page.keyboard.press('KeyC');
+  await page.locator('[data-craft="campfire"]').click();
+  await expect(page.locator('[data-item="campfire"] small')).toHaveText('×1');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Digit4');
+  await expect(page.locator('#placement-bar')).toBeVisible();
+  // A fire cannot be built at the player's own feet, so ask the game which spot
+  // is legal and click *that* spot on the canvas: the click still goes through
+  // the ordinary pointer path.
+  const spot = await page.evaluate(() => {
+    const live = window.__domeo.game();
+    const p = live.player;
+    for (const [dx, dy] of [
+      [70, 0],
+      [-70, 0],
+      [0, 70],
+      [0, -70],
+      [110, 60],
+      [-110, -60],
+      [130, 0],
+      [0, 130],
+    ]) {
+      const x = Math.round((p.x + dx) / 16) * 16,
+        y = Math.round((p.y + dy) / 16) * 16;
+      if (live.canPlace(x, y)) return { x, y, px: p.x, py: p.y };
+    }
+    return null;
+  });
+  expect(spot).not.toBeNull();
+  const box = await page.locator('#gameCanvas').boundingBox();
+  const zoom = Math.min(1.5, Math.max(1.1, Math.min(box.width / 1000, box.height / 730)));
+  await page.locator('#gameCanvas').click({
+    position: {
+      x: box.width / 2 + (spot.x - spot.px) * zoom,
+      y: box.height * 0.52 + (spot.y - spot.py) * zoom,
+    },
+  });
+  await expect(page.locator('#placement-bar')).toBeHidden();
+  await expect(page.locator('#quest-objective')).toHaveText('Nướng một quả mọng', {
+    timeout: 5000,
+  });
+  // Walk to the new fire and cook: that is the whole objective.
+  const towardFire = spot.x > spot.px ? 'KeyD' : 'KeyA';
+  await page.keyboard.down(towardFire);
+  await expect(page.locator('#interaction-label')).toHaveText('Nướng quả mọng', { timeout: 15000 });
+  await page.keyboard.up(towardFire);
+  await page.keyboard.press('KeyE');
+  await expect(page.locator('#quest-objective')).toContainText('mở nhật ký', { timeout: 5000 });
+  await expect(page.locator('#quest-rewards')).toBeVisible();
+  // The reward is gated behind the journal: no claim, no blueprint.
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('[data-craft="workbench"]')).toBeDisabled({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('KeyN');
+  await expect(page.locator('#journal-dialog')).toBeVisible();
+  await page.locator('[data-claim="journey_fire"]').click();
+  await expect(page.locator('#toast-region')).toContainText('Nhận thưởng');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+  // And the journal survives a reload, claimed rewards included.
+  const data = await saved(page);
+  expect(data.quests.quests.journey_fire.status).toBe('claimed');
+  expect(data.quests.unlocked).toContain('recipe:workbench');
+  await page.reload();
+  await ready(page);
+  await page.locator('#continue-button').click();
+  await expect(page.locator('#quest-title')).toHaveText('Một nơi để trở về');
+  await page.keyboard.press('KeyC');
+  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('dying offers a way back, and the journey keeps everything it earned', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  game.inventory.axe = 1;
+  game.inventory.wood = 14;
+  game.world.structures.push({ id: 'built:0', type: 'campfire', x: 60, y: 0 });
+  game.home = { x: 60, y: 0 };
+  await restore(page, game.snapshot());
+  await page.evaluate(() => {
+    const live = window.__domeo.game();
+    live.player.health = 6;
+    const enemy = live.enemies.spawn('stalker', live.player.x + 30, live.player.y);
+    live.enemies.damagePlayer(20, enemy);
+  });
+  await expect(page.locator('#gameover-dialog')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#journey-stats')).toContainText('PHÚT KHÁM PHÁ');
+  await page.locator('#revive-button').click();
+  await expect(page.locator('#gameover-dialog')).toBeHidden();
+  await expect(page.locator('#game-hud')).toBeVisible();
+  const after = await saved(page);
+  expect(after.stats.deaths).toBe(1);
+  expect(after.inventory.axe).toBe(1);
+  expect(after.inventory.wood).toBe(14);
+  expect(after.player.health).toBeGreaterThan(0);
+  // Waking up at home is a real position, and the game keeps running there.
+  expect(Math.abs(after.player.x - 78)).toBeLessThan(2);
+  await expect(page.locator('#clock-label')).not.toHaveText('', { timeout: 3000 });
+  expect(errors).toEqual([]);
+});
+
+test('warmth falls at night in the open and rises beside the fire', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const game = new Game(404);
+  game.elapsed = 1440 * 0.62; // night
+  game.player.warmth = 28;
+  game.inventory.wood = 20;
+  game.inventory.stone = 20;
+  await restore(page, game.snapshot());
+  // Night drains warmth continuously, so this is a band, not one exact digit.
+  const warmth = async () =>
+    Number(await page.locator('#warmth-bar').getAttribute('aria-valuenow'));
+  await expect.poll(warmth).toBeLessThanOrEqual(30);
+  await expect.poll(warmth).toBeGreaterThan(20);
+  await expect(page.locator('#warmth-bar')).toHaveClass(/low/);
+  // A fire next to the player brings it back up. Place it the way the player
+  // does: pick the blueprint, then put it on the ground.
+  const placed = await page.evaluate(() => {
+    const live = window.__domeo.game();
+    live.inventory.campfire = 1;
+    if (!live.beginPlacement('campfire')) return false;
+    for (const [dx, dy] of [
+      [70, 0],
+      [-70, 0],
+      [0, 70],
+      [0, -70],
+      [70, 70],
+      [-70, -70],
+    ]) {
+      if (live.place(live.player.x + dx, live.player.y + dy)) return true;
+    }
+    return false;
+  });
+  expect(placed).toBe(true);
+  const cold = await warmth();
+  await expect.poll(warmth, { timeout: 15000 }).toBeGreaterThan(cold);
+  await expect(page.locator('#warmth-bar')).not.toHaveClass(/low/, { timeout: 15000 });
   expect(errors).toEqual([]);
 });

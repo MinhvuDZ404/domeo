@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { World, makeChunk, hash, overlaps, biomeAt } from '../src/world.js';
-import { DAY_LENGTH, MAX_CACHED_CHUNKS, getDayInfo, getWeather } from '../src/config.js';
+import {
+  CHUNK_SIZE,
+  DAY_LENGTH,
+  MAX_CACHED_CHUNKS,
+  getDayInfo,
+  getWeather,
+} from '../src/config.js';
 
 const starter = (world, id) =>
   world
@@ -179,4 +185,88 @@ test('weather bands are deterministic per seed and blend without jumps', () => {
   // Same band, different seeds usually differ; different bands can differ.
   const other = getWeather(100, 43);
   assert.ok(typeof other.type === 'string');
+});
+
+// ---- 5.1: generation v3 ---------------------------------------------------
+test('generation v3 adds its content without moving a single v2 tree', () => {
+  for (const [cx, cy] of [
+    [0, 0],
+    [3, -2],
+    [-7, 5],
+    [12, 12],
+    [-30, 24],
+  ]) {
+    const v2 = makeChunk(404, cx, cy, 2);
+    const v3 = makeChunk(404, cx, cy, 3);
+    // Every v2 entity is still there, in the same order, at the same place.
+    for (const [index, entity] of v2.entities.entries()) {
+      assert.deepEqual(v3.entities[index], entity, `chunk ${cx},${cy} entity ${index} moved`);
+    }
+    assert.ok(v3.entities.length >= v2.entities.length);
+    assert.deepEqual(v3.decorations, v2.decorations);
+  }
+});
+
+test('generation v1 output is byte-identical to the original generator', () => {
+  const chunk = makeChunk(404, 0, 0, 1);
+  assert.deepEqual(Object.keys(chunk).sort(), ['decorations', 'entities']);
+  assert.equal(chunk.decorations.length, 26);
+  assert.equal(
+    chunk.entities.some((entity) => entity.type === 'ironwood'),
+    false,
+  );
+  assert.equal(
+    chunk.entities.some((entity) => entity.type === 'geode'),
+    false,
+  );
+  assert.equal(
+    chunk.entities.some((entity) => entity.type === 'mushroom'),
+    false,
+  );
+});
+
+test('every seed has exactly one grove, far from home and marked on the map', () => {
+  for (const seed of [0, 1, 7, 404, 99991]) {
+    const world = new World(seed);
+    const grove = world.grove();
+    assert.ok(grove, `seed ${seed} has no grove`);
+    assert.equal(grove.type, 'ancientGrove');
+    const distance = Math.hypot(grove.x, grove.y);
+    assert.ok(distance > 5000 && distance < 10000, `grove ${distance.toFixed(0)}px from home`);
+    // Deterministic: the same seed always has the grove in the same place.
+    assert.deepEqual(new World(seed).grove(), grove);
+    // The grove really is in the chunk it claims to be in.
+    const cx = Math.floor(grove.x / CHUNK_SIZE);
+    const cy = Math.floor(grove.y / CHUNK_SIZE);
+    const chunk = world.getChunk(cx, cy);
+    assert.deepEqual(chunk.landmarks, [{ ...grove }]);
+    // And it can be found by the ordinary landmark query.
+    const found = world.landmarksNear(grove.x, grove.y, 120);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].id, grove.id);
+  }
+  // Older generations keep their forest: no grove is ever invented for them.
+  assert.equal(new World(404, [], [], 2).grove(), null);
+  assert.equal(new World(404, [], [], 1).grove(), null);
+});
+
+test('v3 resources only appear far from home and only where they belong', () => {
+  const world = new World(404);
+  const found = new Map();
+  for (let cx = -20; cx <= 20; cx += 4) {
+    for (let cy = -20; cy <= 20; cy += 4) {
+      for (const entity of world.getChunk(cx, cy).entities) {
+        if (entity.type !== 'ironwood' && entity.type !== 'geode') continue;
+        const distance = Math.hypot(entity.x, entity.y);
+        assert.ok(distance > 1400, `${entity.type} grew ${distance.toFixed(0)}px from home`);
+        const biome = world.biomeAt(entity.x, entity.y);
+        if (entity.type === 'ironwood')
+          assert.ok(['deepwood', 'ancient'].includes(biome), `ironwood in ${biome}`);
+        else assert.ok(['rocky', 'ancient', 'deepwood'].includes(biome), `geode in ${biome}`);
+        found.set(entity.type, (found.get(entity.type) ?? 0) + 1);
+      }
+    }
+  }
+  assert.ok(found.get('ironwood') > 0, 'ancient wood has to exist somewhere');
+  assert.ok(found.get('geode') > 0, 'crystal veins have to exist somewhere');
 });

@@ -46,6 +46,33 @@ const paths = {
   cloud: '<path d="M6 18a4 4 0 0 1 0-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17 18H6Z"/>',
   rain: '<path d="M6 14a4 4 0 0 1 0-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17 14H6Z"/><path d="M8 17v2m4-2v2m4-2v2"/>',
   mist: '<path d="M4 9h16M6 13h12M8 17h8M5 21h14"/>',
+  // 5.1 additions: weapons, camp pieces, creatures and quest language.
+  sword: '<path d="M14.5 3.5 20 9l-8.5 8.5-3-3L14.5 3.5ZM5.5 14.5l4 4-3 3-4-4 3-3Z"/>',
+  blade: '<path d="M12 2 4 12l8 10 8-10-8-10Zm0 4.5V18"/>',
+  runeAxe: '<path d="M6 22 15 6M12 3l8 3-2 8-8-3 2-8ZM12.5 8.5 15 12"/>',
+  runePick: '<path d="m6 22 9-14M4 5c6-3 14 1 17 8-6-4-11-6-18-5Z"/><path d="M9 9.5h5"/>',
+  bench: '<path d="M3 10h18v4H3zM5 14v7M19 14v7M7 10V5h10v5"/>',
+  tent: '<path d="M12 4 3 20h18L12 4Zm0 5v11"/>',
+  table: '<path d="M4 8h16v10H4zM4 12.5h16M9 8v10M15 8v10"/>',
+  beacon:
+    '<path d="M12 2v3M9 8.5 12 4l3 4.5-1 8H10l-1-8Zm1 10.5h4l1 5H9l1-5Z"/><path d="m4.5 10.5 3 1M19.5 10.5l-3 1"/>',
+  seat: '<path d="M5 11.5h14v3H5zM7 14.5v5M17 14.5v5M7 11.5V7h10v4.5"/>',
+  planter:
+    '<path d="M6 12h12l-1 8H7l-1-8ZM12 12c0-4-2-6-4-6 0 4 2 6 4 6Zm0-2c0-3 2-5 4-5 0 3-2 5-4 5Z"/>',
+  monolith: '<path d="M9 21 8 5l4-3 4 3-1 16H9Z"/><path d="M12 8v8"/>',
+  seed: '<path d="M12 21c-1-6 1-11 7-13-1 7-3 11-7 13Z"/><path d="M12 21c-6-2-8-6-8-13 6 1 8 6 8 13Z"/>',
+  shard: '<path d="M12 3l4 6-4 12-4-12 4-6Z"/><path d="M8 9h8"/>',
+  essence: '<path d="M12 3c3 5 5 7 5 10a5 5 0 1 1-10 0c0-3 2-5 5-10Z"/><path d="M9.5 14h5"/>',
+  stew: '<path d="M4 11h16c0 5-2 8-8 8s-8-3-8-8Z"/><path d="M8 8c-2-2 2-2 0-4m5 4c-2-2 2-2 0-4"/>',
+  cup: '<path d="M5 8h11v6a5 5 0 0 1-4 5H8a3 3 0 0 1-3-3V8Z"/><path d="M16 10h2a2 2 0 0 1 0 5h-2M8 4c0-1 1-1 1-2"/>',
+  paw: '<circle cx="7" cy="14.5" r="2.8"/><circle cx="12" cy="10.5" r="3"/><circle cx="17" cy="14.5" r="2.8"/><path d="M12 20c-3 0-5-2-5-4h10c0 2-2 4-5 4Z"/>',
+  quest: '<path d="M6 3h9l4 4v14H6V3Z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>',
+  banner: '<path d="M6 3v18M6 4h12l-2.5 4L18 12H6"/>',
+  flame:
+    '<path d="M13 2c3 7-3 7 1 10 1-1 2-3 2-4 6 8 1 14-4 14S3 15 9 8c0 3 1 4 2 4 3-2-1-5 2-10Z"/>',
+  bolt: '<path d="M13 2 5 13h5l-1 9 8-11h-5l1-9Z"/>',
+  shield: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/>',
+  warning: '<path d="M12 4l9 16H3l9-16Z"/><path d="M12 10v4m0 3h.01"/>',
 };
 export function icon(name, size = 24) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.leaf}</svg>`;

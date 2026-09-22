@@ -451,3 +451,130 @@ test('biome and weather readings follow the seed, not the frame rate', () => {
   assert.deepEqual(a.weather(), b.weather());
   assert.ok(['clear', 'cloud', 'mist', 'rain'].includes(a.weather().type));
 });
+
+// ---- 5.1: survival, fighting and the way back -----------------------------
+test('warmth drains in the cold and comes back beside a fire', () => {
+  const game = new Game(404);
+  game.elapsed = 1440 * 0.62; // night
+  const start = game.player.warmth;
+  for (let i = 0; i < 200; i++) game.update(0.05, { x: 0, y: 0 });
+  assert.ok(game.player.warmth < start, 'a night in the open has to cost warmth');
+  const cold = game.player.warmth;
+  game.world.structures.push({ id: 'built:0', type: 'campfire', x: 10, y: 0 });
+  game.home = { x: 10, y: 0 };
+  game.refreshCamp();
+  for (let i = 0; i < 400; i++) game.update(0.05, { x: 0, y: 0 });
+  assert.ok(game.player.warmth > cold, 'a fire must give warmth back');
+  assert.ok(game.player.warmth <= 100);
+});
+
+test('being cold hurts, being warm does not', () => {
+  const warm = new Game(404);
+  const health = warm.player.health;
+  for (let i = 0; i < 200; i++) warm.update(0.05, { x: 0, y: 0 });
+  assert.equal(warm.player.health, health, 'daytime warmth is free');
+
+  const cold = new Game(404);
+  cold.elapsed = 1440 * 0.62;
+  cold.player.warmth = 4;
+  cold.player.hunger = 100;
+  for (let i = 0; i < 200; i++) cold.update(0.05, { x: 0, y: 0 });
+  assert.ok(cold.player.health < 100, 'freezing damages the player');
+  assert.ok(cold.player.health > 0, 'and it is slow enough to walk home');
+});
+
+test('walking regenerates stamina; sprinting spends it', () => {
+  const game = new Game(404);
+  game.update(0.05, { x: 1, y: 0 });
+  game.player.stamina = 40;
+  game.sprinting = false;
+  for (let i = 0; i < 20; i++) game.update(0.05, { x: 1, y: 0 });
+  const walked = game.player.stamina;
+  assert.ok(walked > 40, 'walking is free and gives stamina back');
+  game.sprinting = true;
+  for (let i = 0; i < 20; i++) game.update(0.05, { x: 1, y: 0 });
+  assert.ok(game.player.stamina < walked, 'sprinting costs stamina');
+});
+
+test('an exhausted player still attacks, but weakly', () => {
+  const game = new Game(404);
+  const enemy = game.enemies.spawn('stalker', game.player.x + 30, game.player.y);
+  game.player.stamina = 100;
+  game.attack({ x: 1, y: 0 });
+  const strong = 26 - enemy.health;
+  enemy.health = 26;
+  game.cooldown = 0;
+  game.player.stamina = 1;
+  game.attack({ x: 1, y: 0 });
+  const weak = 26 - enemy.health;
+  assert.ok(strong > 0 && weak > 0, 'a swing must always land while there is a target');
+  assert.ok(weak < strong, 'a tired swing is weaker');
+  assert.ok(game.player.stamina >= 0, 'stamina never goes negative');
+});
+
+test('dodging needs stamina and refuses politely when there is none', () => {
+  const game = new Game(404);
+  game.player.stamina = 100;
+  assert.equal(game.dodge({ x: 0, y: 1 }), true);
+  game.player.dodge = 0;
+  game.player.stamina = 2;
+  assert.equal(game.dodge({ x: 0, y: 1 }), false);
+  const denied = game.drainEvents().find((event) => event.type === 'message');
+  assert.ok(denied, 'the refusal must be explainable');
+});
+
+test('dying is a setback, not a wipe: the journey wakes up at home', () => {
+  const game = new Game(404);
+  game.world.structures.push({ id: 'built:0', type: 'campfire', x: 300, y: -200 });
+  game.home = { x: 300, y: -200 };
+  game.inventory.axe = 1;
+  game.inventory.wood = 12;
+  game.stats.distance = 900;
+  game.quests.report('gather', 'wood', 4);
+  game.damagePlayer(999, { type: 'stalker' });
+  assert.equal(game.dead, true);
+  assert.equal(game.stats.deaths, 1);
+  assert.equal(game.revive(), true);
+  assert.equal(game.dead, false);
+  assert.equal(game.player.x, 318);
+  assert.equal(game.player.y, -174);
+  assert.ok(game.player.health >= 40);
+  assert.equal(game.inventory.axe, 1, 'death must never take the tools');
+  assert.equal(game.inventory.wood, 12);
+  assert.equal(game.quests.state('journey_fire').status, 'active', 'quests survive death');
+  // And the save is a normal save: it loads, it validates, it keeps playing.
+  const restored = Game.restore(game.snapshot());
+  assert.equal(restored.dead, false);
+  assert.equal(restored.stats.deaths, 1);
+  assert.equal(restored.inventory.axe, 1);
+});
+
+test('a save carries the whole 5.1 journey: quests, flags, warmth and camp', () => {
+  const game = new Game(404);
+  game.world.structures.push({ id: 'built:0', type: 'shelter', x: 20, y: 0 });
+  game.home = { x: 0, y: 0 };
+  game.world.structures.push({ id: 'built:1', type: 'campfire', x: 0, y: 0 });
+  game.refreshCamp();
+  game.reportQuest('build', 'campfire', 1, { nearHome: true });
+  game.reportQuest('cook', 'cooked', 1);
+  game.claimQuest('journey_fire');
+  game.player.warmth = 61;
+  game.player.stamina = 42;
+  game.flags.beaconLit = true;
+  const data = game.snapshot();
+  const restored = Game.restore(data);
+  assert.equal(restored.quests.status('journey_fire'), 'claimed');
+  assert.equal(restored.quests.isUnlocked('recipe:workbench'), true);
+  assert.equal(restored.player.warmth, 61);
+  assert.equal(restored.player.stamina, 42);
+  assert.equal(restored.flags.beaconLit, true);
+  assert.equal(restored.campSummary().level, 2);
+  assert.equal(restored.campState().inside, true);
+  // A restored journey keeps working: crafting, quests and combat all alive.
+  restored.inventory.wood = 20;
+  restored.inventory.stone = 20;
+  assert.equal(restored.canCraft('workbench'), true);
+  assert.equal(restored.canCraft('campfire'), true);
+  restored.update(0.05, { x: 1, y: 0 });
+  assert.equal(restored.elapsed > 0, true);
+});

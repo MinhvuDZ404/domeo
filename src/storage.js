@@ -10,10 +10,16 @@ import {
   SAVE_VERSION,
   STAT_KEYS,
   UNIQUE_ITEMS,
+  WARMTH_MAX,
+  STAMINA_MAX,
   WORLD_LIMIT,
   emptyItems,
   emptyStats,
 } from './config.js';
+import { KNOWN_UNLOCK_KEYS, QUEST_IDS, getQuest } from './quests.js';
+
+const QUEST_STATUSES = ['active', 'done', 'claimed'];
+const FLAG_KEYS = ['groveCleared', 'beaconLit', 'groveRevealed', 'keeperSeen'];
 
 const number = (n, min = 0, max = Number.MAX_SAFE_INTEGER) =>
   typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
@@ -25,6 +31,40 @@ function validInventory(bag) {
     object(bag) &&
     Object.keys(ITEMS).every((id) => integer(bag[id], 0, UNIQUE_ITEMS.includes(id) ? 1 : MAX_STACK))
   );
+}
+
+// World flags are a closed set: an unknown key means the payload was not
+// written by this game, so the save is refused rather than half-trusted.
+function validFlags(flags) {
+  if (!object(flags)) return false;
+  const keys = Object.keys(flags);
+  if (keys.some((key) => !FLAG_KEYS.includes(key))) return false;
+  return keys.every((key) => typeof flags[key] === 'boolean');
+}
+
+// Quest progress must point at real quests and real objectives, and can never
+// exceed the objective. A save that claims more is rejected as corrupt.
+function validQuests(quests) {
+  if (!object(quests)) return false;
+  const entries = quests.quests ?? {};
+  if (!object(entries)) return false;
+  for (const [id, state] of Object.entries(entries)) {
+    if (!QUEST_IDS.includes(id)) return false;
+    if (!object(state) || !QUEST_STATUSES.includes(state.status)) return false;
+    const progress = state.progress ?? {};
+    if (!object(progress)) return false;
+    const quest = getQuest(id);
+    for (const [objectiveId, value] of Object.entries(progress)) {
+      const objective = quest?.objectives?.find((entry) => entry.id === objectiveId);
+      if (!objective) return false;
+      if (!integer(value, 0, objective.count)) return false;
+    }
+  }
+  const unlocked = quests.unlocked ?? [];
+  if (!Array.isArray(unlocked) || unlocked.length > 64) return false;
+  for (const key of unlocked)
+    if (typeof key !== 'string' || !KNOWN_UNLOCK_KEYS.has(key)) return false;
+  return true;
 }
 
 export function migrateSave(data) {
@@ -66,6 +106,27 @@ export function migrateSave(data) {
       },
     };
   }
+  // v3 (Domeo 5.0): 16 items, 14 stats, generation 1 or 2. v4 adds the quest
+  // journal, persistent world flags and the warmth/stamina survival stats.
+  if (current.version === 3) {
+    current = {
+      ...current,
+      version: 4,
+      player: {
+        warmth: WARMTH_MAX,
+        stamina: STAMINA_MAX,
+        ...current.player,
+      },
+      // 5.1 grew both ledgers, so a 5.0 payload is completed rather than
+      // rejected: a save must never be invalidated by new content existing.
+      inventory: { ...emptyItems(), ...current.inventory },
+      stats: { ...emptyStats(), ...current.stats },
+      chest: { ...emptyItems(), ...current.chest },
+      quests: { quests: {}, unlocked: [] },
+      flags: { groveCleared: false, beaconLit: false, groveRevealed: false, keeperSeen: false },
+      journeyComplete: false,
+    };
+  }
   return current.version === SAVE_VERSION ? current : null;
 }
 
@@ -92,6 +153,8 @@ export function validateSave(data) {
     !['up', 'down', 'left', 'right'].includes(p.direction)
   )
     return false;
+  if (!number(p.warmth ?? WARMTH_MAX, 0, WARMTH_MAX)) return false;
+  if (!number(p.stamina ?? STAMINA_MAX, 0, STAMINA_MAX)) return false;
   if (!validInventory(save.inventory)) return false;
   if (!STAT_KEYS.every((id) => number(save.stats[id] ?? 0))) return false;
   if (typeof save.torchLit !== 'boolean' || !integer(save.world.seed, 0, 0xffffffff)) return false;
@@ -113,6 +176,9 @@ export function validateSave(data) {
   for (const key of save.discovered) {
     if (typeof key !== 'string' || !/^lm:-?\d{1,5},-?\d{1,5}$/.test(key)) return false;
   }
+  if (typeof save.journeyComplete !== 'boolean') return false;
+  if (!validFlags(save.flags ?? {})) return false;
+  if (!validQuests(save.quests ?? { quests: {}, unlocked: [] })) return false;
   const { changes, structures } = save.world;
   if (
     !Array.isArray(changes) ||
@@ -126,7 +192,9 @@ export function validateSave(data) {
     if (
       !object(change) ||
       typeof change.id !== 'string' ||
-      !/^(start:(gar)?\d{1,2}|-?\d{1,5},-?\d{1,5}:\d{1,2})$/.test(change.id) ||
+      !/^(start:(gar)?\d{1,2}|v3:-?\d{1,5},-?\d{1,5}:\d{1,2}|-?\d{1,5},-?\d{1,5}:\d{1,2})$/.test(
+        change.id,
+      ) ||
       ids.has(change.id) ||
       !integer(change.remaining, 0, 3) ||
       !number(change.respawnAt, 0, save.elapsed + 301)

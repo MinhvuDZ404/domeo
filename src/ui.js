@@ -1,8 +1,23 @@
-import { BIOMES, CHUNK_SIZE, ITEMS, RECIPES, RESOURCES, getDayInfo } from './config.js';
+import { BIOMES, CHUNK_SIZE, ITEMS, PLACEABLE, RECIPES, RESOURCES, getDayInfo } from './config.js';
 import { MOTION_MODES, QUALITY_MODES, percentToVolume, volumeToPercent } from './settings.js';
+import { CAMP_TIERS } from './camp.js';
+import { PASSIVES, QUESTS, QUEST_GROUPS } from './quests.js';
 import { icon, fillIcons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
+// Below this a dodge (24) or a swing is no longer affordable, so the stamina
+// bar warns slightly before the player is refused.
+const DRAW_STAMINA_WARNING = 28;
+// A compact change signature for side quests, so the DOM is only touched when
+// something actually changed.
+function questsSignature(quests, game) {
+  return quests
+    .map((quest) => {
+      const progress = game.quests.progressOf(quest);
+      return `${quest.id}:${progress.map((objective) => objective.value).join('.')}`;
+    })
+    .join('|');
+}
 const MOTION_LABELS = {
   system: 'Theo hệ thống',
   on: 'Luôn giảm',
@@ -17,9 +32,11 @@ export class UI {
     transfer = () => {},
     setting = () => {},
     resetSettings = () => {},
+    claimQuest = () => {},
   }) {
     this.action = action;
     this.transfer = transfer;
+    this.claimQuest = claimQuest;
     this.selectedItem = 'berry';
     this.tab = 'bag';
     this.lastGoalSignature = '';
@@ -89,6 +106,13 @@ export class UI {
     $('journal-toggle').addEventListener('click', () => {
       const collapsed = document.querySelector('.journal-card').classList.toggle('collapsed');
       $('journal-toggle').setAttribute('aria-expanded', String(!collapsed));
+    });
+    $('journal-open').addEventListener('click', () => action('journal'));
+    // Rewards are claimed by hand: the journal is where the player decides that
+    // a finished quest is really finished.
+    $('journal-list').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-claim]');
+      if (button && !button.disabled) claimQuest(button.dataset.claim);
     });
     document
       .querySelectorAll('[data-close]')
@@ -226,16 +250,22 @@ export class UI {
     this.game = game;
     const p = game.player,
       day = getDayInfo(game.elapsed);
+    // Each vital warns at the point where it starts to matter: health below the
+    // injury vignette, warmth before the cold starts biting, hunger and stamina
+    // when the next action would be refused.
+    const LOW = { health: 32, hunger: 25, warmth: 30, stamina: DRAW_STAMINA_WARNING };
     for (const [id, value] of [
       ['health', p.health],
       ['hunger', p.hunger],
+      ['warmth', p.warmth ?? 100],
+      ['stamina', p.stamina ?? 100],
     ]) {
       const rounded = Math.ceil(value),
         bar = $(`${id}-bar`);
       $(`${id}-value`).firstChild.nodeValue = `${rounded} `;
       bar.firstElementChild.style.width = `${value}%`;
       bar.setAttribute('aria-valuenow', String(rounded));
-      bar.classList.toggle('low', value < 25);
+      bar.classList.toggle('low', value < LOW[id]);
     }
     $('day-label').textContent = `NGÀY ${String(day.day).padStart(2, '0')}`;
     $('clock-label').textContent = `${day.clock} · ${day.label}`;
@@ -282,6 +312,22 @@ export class UI {
       $('interaction-label').textContent = 'Mở rương gỗ';
       $('interaction-detail').textContent = 'Cất hoặc lấy đồ';
       $('interaction-prompt').classList.remove('warning');
+    } else if (focus?.kind === 'beacon') {
+      $('interaction-label').textContent = game.flags?.beaconLit
+        ? 'Đèn hiệu đã sáng'
+        : 'Thắp đèn hiệu';
+      $('interaction-detail').textContent = game.flags?.beaconLit
+        ? 'Ánh sáng vẫn còn đó'
+        : 'Cần hạt giống bình minh';
+      $('interaction-prompt').classList.toggle(
+        'warning',
+        !game.flags?.beaconLit && !game.inventory.ancientSeed,
+      );
+    } else if (focus?.kind === 'shelter') {
+      const ready = game.restReady !== false;
+      $('interaction-label').textContent = ready ? 'Nghỉ một lát' : 'Chưa mệt tới vậy';
+      $('interaction-detail').textContent = ready ? 'Hồi máu và hơi ấm' : 'Thử lại sau một chút';
+      $('interaction-prompt').classList.remove('warning');
     } else if (focus?.kind === 'campfire') {
       $('interaction-label').textContent = game.inventory.berry
         ? 'Nướng quả mọng'
@@ -300,24 +346,10 @@ export class UI {
     $('touch-interact').querySelector('small').textContent = game.placement
       ? 'ĐẶT XUỐNG'
       : 'HÁI LƯỢM';
-    const goals = game.goals(),
-      count = goals.filter((goal) => goal.done).length;
-    const signature = goals.map((goal) => Number(goal.done)).join('');
-    if (signature !== this.lastGoalSignature) {
-      this.lastGoalSignature = signature;
-      $('goal-count').textContent = `${count}/${goals.length}`;
-      // Keep the journal compact: previous step, current step, then the next step.
-      const current = goals.findIndex((goal) => !goal.done);
-      const start =
-        current < 0 ? goals.length - 3 : Math.max(0, Math.min(current - 1, goals.length - 3));
-      $('goal-list').innerHTML = goals
-        .slice(start, start + 3)
-        .map(
-          (goal, index) =>
-            `<li class="goal ${goal.done ? 'done' : start + index === current ? 'active' : ''}"><span class="goal-dot">${goal.done ? icon('check', 11) : ''}</span><div><strong>${goal.label}</strong><small>${goal.hint}</small></div></li>`,
-        )
-        .join('');
-    }
+    this.renderQuestTracker(game);
+    this.renderSideQuests(game);
+    this.renderCamp(game);
+    this.renderThreat(game);
     const footer = $('journal-footer');
     if (footer) {
       const text =
@@ -327,6 +359,194 @@ export class UI {
       if (footer.textContent !== text) footer.textContent = text;
     }
     if ($('inventory-dialog').open) this.renderInventory(game);
+    if ($('journal-dialog').open && this.journalChanged(game)) this.renderJournal(game);
+  }
+  // ---- 5.1: quests, camp and danger ---------------------------------------
+  /**
+   * The tracker is the one line of quest information that is always on screen:
+   * the current step of the main journey, never the whole list.
+   */
+  renderQuestTracker(game) {
+    const summary = game.questSummary ? game.questSummary() : null;
+    const title = $('quest-title'),
+      objective = $('quest-objective'),
+      count = $('quest-count'),
+      progress = $('quest-progress'),
+      rewards = $('quest-rewards');
+    if (!title) return;
+    const signature = summary
+      ? `${summary.id}:${summary.status}:${summary.objective}:${summary.value}:${summary.pendingRewards}`
+      : 'none';
+    if (signature === this.lastQuestSignature) return;
+    this.lastQuestSignature = signature;
+    if (!summary) {
+      title.textContent = 'Khu rừng đang chờ';
+      objective.textContent = 'Đi theo hướng bạn muốn.';
+      count.textContent = '';
+      progress.firstElementChild.style.width = '0%';
+      progress.setAttribute('aria-valuenow', '0');
+      rewards.hidden = true;
+      return;
+    }
+    title.textContent = summary.title;
+    objective.textContent =
+      summary.status === 'done' ? 'Xong rồi — mở nhật ký để nhận thưởng.' : summary.objective;
+    count.textContent =
+      summary.value === null || summary.status === 'done'
+        ? ''
+        : `${summary.value}/${summary.count}`;
+    const percent = Math.round(summary.percent * 100);
+    progress.firstElementChild.style.width = `${percent}%`;
+    progress.setAttribute('aria-valuenow', String(percent));
+    rewards.hidden = summary.pendingRewards === 0;
+    if (summary.pendingRewards > 0)
+      rewards.innerHTML = `${icon('banner', 13)} ${summary.pendingRewards} phần thưởng đang chờ · nhấn N`;
+  }
+  /** Side quests live under the tracker, at most three at a time. */
+  renderSideQuests(game) {
+    const list = $('goal-list');
+    if (!list || !game.quests) return;
+    const claimed = game.quests.claimedCount ? game.quests.claimedCount() : 0;
+    const active = game.quests.active().filter((quest) => quest.group !== 'journey');
+    const signature = `${claimed}/${questsSignature(active, game)}`;
+    if (signature === this.lastGoalSignature) return;
+    this.lastGoalSignature = signature;
+    $('goal-count').textContent = `${game.quests.completedCount()}/${QUESTS.length}`;
+    if (!active.length) {
+      list.innerHTML = `<li class="goal"><span class="goal-dot">${icon('leaf', 11)}</span><div><strong>Chưa có việc nào khác</strong><small>Hành trình chính vẫn đang chờ bạn.</small></div></li>`;
+      return;
+    }
+    list.innerHTML = active
+      .slice(0, 3)
+      .map((quest) => {
+        const progress = game.quests.progressOf(quest);
+        const done = progress.filter((objective) => objective.complete).length;
+        const next = progress.find((objective) => !objective.complete) ?? progress[0];
+        return `<li class="goal active"><span class="goal-dot">${done === progress.length ? icon('check', 11) : ''}</span><div><strong>${quest.title}</strong><small>${next.label} · ${next.value}/${next.count}</small></div></li>`;
+      })
+      .join('');
+  }
+  renderCamp(game) {
+    const panel = $('camp-panel');
+    if (!panel || !game.home) {
+      if (panel) panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    const summary = game.campSummary();
+    const signature = `${summary.level}/${summary.placed}/${summary.built.join(',')}`;
+    if (signature === this.lastCampSignature) return;
+    this.lastCampSignature = signature;
+    $('camp-level').textContent = summary.level > 0 ? `Cấp ${summary.level}` : 'Chưa dựng gì';
+    $('camp-next').textContent = summary.next
+      ? `Tiếp theo: ${summary.next.tier.name} — ${summary.next.tier.benefit}`
+      : 'Trại đã đủ đầy. Khu rừng vẫn còn rộng.';
+    $('camp-list').innerHTML = CAMP_TIERS.map((tier) => {
+      const built = summary.built.includes(tier.id);
+      return `<li class="camp-item ${built ? 'built' : ''}"><span class="camp-dot">${built ? icon('check', 11) : ''}</span><span>${tier.name}</span></li>`;
+    }).join('');
+  }
+  /** One badge, shown only when something is actually aware of the player. */
+  renderThreat(game) {
+    const badge = $('threat-badge');
+    if (!badge || !game.enemies) return;
+    const summary = game.enemies.summary();
+    const level = game.enemies.threat ? game.enemies.threat() : 0;
+    const near = summary.nearest && summary.nearest.distance < 420 ? summary.nearest : null;
+    const show = level > 0.25 || !!summary.elite;
+    if (badge.hidden !== !show) badge.hidden = !show;
+    if (!show) {
+      // Nothing to say: clear the signature so the badge re-renders next time.
+      if (this.lastThreatSignature) this.lastThreatSignature = '';
+      return;
+    }
+    const text = summary.elite
+      ? `${summary.elite.name} · ${Math.round(summary.elite.health)}/${summary.elite.maxHealth}`
+      : near
+        ? `${near.distance < 200 ? 'Ngay sát' : 'Gần đây'}: ${near.name}`
+        : 'Có gì đó đang tới';
+    if (text !== this.lastThreatSignature) {
+      this.lastThreatSignature = text;
+      $('threat-text').textContent = text;
+    }
+    badge.classList.toggle('danger', level > 0.7);
+  }
+  // The full journal: every quest the player can see, grouped, with rewards.
+  /**
+   * Whether the journal would read differently than the last time it was drawn.
+   * The dialog is open for as long as the player is reading it, so rebuilding it
+   * on every UI tick would churn the DOM (and any click target inside it) for no
+   * reason at all.
+   */
+  journalChanged(game) {
+    if (!game.quests) return false;
+    const signature =
+      `${game.quests.claimedCount()}:${game.stats.quests}:${game.journeyComplete ? 1 : 0}:` +
+      game.quests.defs
+        .map(
+          (quest) =>
+            `${quest.id}:${game.quests.status(quest.id)}:` +
+            game.quests
+              .progressOf(quest)
+              .map((objective) => objective.value)
+              .join(','),
+        )
+        .join('|');
+    if (signature === this.lastJournalSignature) return false;
+    this.lastJournalSignature = signature;
+    return true;
+  }
+  renderJournal(game) {
+    const list = $('journal-list');
+    if (!list || !game.quests) return;
+    // Keep the signature in step: claiming from the journal draws it directly,
+    // so the next tick must not immediately rebuild the same card again.
+    this.journalChanged(game);
+    const visible = game.quests.defs.filter((quest) => game.quests.status(quest.id) !== 'locked');
+    const claimed = game.quests.claimedCount();
+    $('journal-summary').textContent =
+      `${claimed}/${QUESTS.length} phần thưởng đã nhận · ${game.stats.quests} nhiệm vụ hoàn thành` +
+      (game.journeyComplete ? ' · Hành trình đã trọn vẹn.' : '');
+    if (!visible.length) {
+      list.innerHTML = '<p class="section-note">Chưa có gì trong nhật ký.</p>';
+      return;
+    }
+    list.innerHTML = QUEST_GROUPS.map((group) => {
+      const quests = visible.filter((quest) => quest.group === group.id);
+      if (!quests.length) return '';
+      const entries = quests
+        .map((quest) => {
+          const status = game.quests.status(quest.id);
+          const progress = game.quests.progressOf(quest);
+          const objectives = progress
+            .map(
+              (objective) =>
+                `<li class="${objective.complete ? 'done' : ''}"><span class="goal-dot">${objective.complete ? icon('check', 10) : ''}</span><span>${objective.label}</span><small>${objective.value}/${objective.count}</small></li>`,
+            )
+            .join('');
+          const rewards = [];
+          for (const [item, count] of Object.entries(quest.reward?.items ?? {}))
+            rewards.push(`${count} ${ITEMS[item].name.toLowerCase()}`);
+          for (const key of quest.reward?.recipes ?? []) {
+            const id = key.replace('recipe:', '');
+            if (ITEMS[id]) rewards.push(`công thức ${ITEMS[id].name.toLowerCase()}`);
+          }
+          for (const key of quest.reward?.passives ?? []) {
+            const passive = PASSIVES[key.replace('passive:', '')];
+            if (passive) rewards.push(passive.name);
+          }
+          const claimable = status === 'done';
+          return `<article class="quest-card ${status}" data-quest="${quest.id}">
+  <header><div><h3>${quest.title}</h3><small>${quest.description}</small></div><span class="quest-status">${status === 'claimed' ? 'Đã nhận' : claimable ? 'Chờ thưởng' : 'Đang làm'}</span></header>
+  <ul class="quest-objectives">${objectives}</ul>
+  ${rewards.length ? `<p class="quest-reward-line">${icon('banner', 13)} ${rewards.join(' · ')}</p>` : ''}
+  ${claimable ? `<button class="button button-dark" data-claim="${quest.id}">Nhận phần thưởng</button>` : ''}
+  ${status === 'active' ? `<p class="quest-hint">${quest.hint ?? ''}</p>` : ''}
+</article>`;
+        })
+        .join('');
+      return `<section class="journal-group"><h3 class="journal-group-title">${group.label}</h3>${entries}</section>`;
+    }).join('');
   }
   // The needle points at the marked home and the mini-map keeps the chunks
   // already walked, redrawn from the explored set (the world is never stored).
@@ -459,32 +679,29 @@ export class UI {
     $('item-detail').innerHTML =
       `<div class="detail-heading"><h3>${item.name}</h3><small>${item.kind}</small></div><p>${item.description}</p>`;
     const action = $('item-action');
-    action.hidden = ![
-      'berry',
-      'cooked',
-      'mushroom',
-      'salve',
-      'campfire',
-      'wall',
-      'chest',
-      'lantern',
-      'torch',
-    ].includes(this.selectedItem);
+    const foodLabels = {
+      berry: 'Ăn một quả · +25 no',
+      cooked: 'Ăn quả nướng · +40 no',
+      mushroom: 'Ăn nấm · +15 no',
+      meal: 'Ăn một bữa · +55 no',
+      tea: 'Uống trà · hồi sức bền',
+      salve: game.passive?.('herbalist') ? 'Dùng cao dán · +45 máu' : 'Dùng cao dán · +35 máu',
+    };
+    const placeable = PLACEABLE.includes(this.selectedItem);
+    action.hidden = !(
+      this.selectedItem in foodLabels ||
+      placeable ||
+      this.selectedItem === 'torch'
+    );
     action.disabled = !game.inventory[this.selectedItem];
     action.textContent =
-      this.selectedItem === 'berry'
-        ? 'Ăn một quả · +25 no'
-        : this.selectedItem === 'cooked'
-          ? 'Ăn quả nướng · +40 no'
-          : this.selectedItem === 'mushroom'
-            ? 'Ăn nấm · +15 no'
-            : this.selectedItem === 'salve'
-              ? 'Dùng cao dán · +35 máu'
-              : this.selectedItem === 'torch'
-                ? game.torchLit
-                  ? 'Tắt đuốc'
-                  : 'Thắp đuốc'
-                : 'Mang ra đặt';
+      this.selectedItem in foodLabels
+        ? foodLabels[this.selectedItem]
+        : this.selectedItem === 'torch'
+          ? game.torchLit
+            ? 'Tắt đuốc'
+            : 'Thắp đuốc'
+          : 'Mang ra đặt';
     this.renderChest(game);
     const stash = $('stash-selected');
     if (stash) stash.hidden = !game.openChest;

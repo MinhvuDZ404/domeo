@@ -1,6 +1,7 @@
 import {
   BIOMES,
   CHUNK_SIZE,
+  GROVE_TYPE,
   LANDMARK_TYPES,
   MAX_CACHED_CHUNKS,
   RESOURCES,
@@ -244,8 +245,68 @@ function makeChunkV2(seed, cx, cy) {
   return { entities, decorations, landmarks };
 }
 
+// Where the ancient grove waits. Every seed has exactly one, always far from
+// home, always in the same place: the long-term journey needs a real destination
+// that cannot be missed by luck alone.
+export function groveSite(seed) {
+  const h = hash(seed >>> 0, 913, 7717);
+  const angle = ((h % 360) / 360) * Math.PI * 2;
+  const distance = 6200 + ((h >>> 9) % 2400);
+  const x = Math.round(Math.cos(angle) * distance);
+  const y = Math.round(Math.sin(angle) * distance);
+  return {
+    id: `lm:${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)}`,
+    type: GROVE_TYPE,
+    x,
+    y,
+    variant: ((h >>> 17) % 1000) / 1000,
+  };
+}
+
+/**
+ * Generation v3 = generation v2 plus 5.1 content, layered with its own random
+ * stream. A v3 chunk therefore always *contains* the matching v2 chunk, so old
+ * journeys keep their exact forest while new ones get the grove, ancient wood
+ * and crystal veins.
+ */
+function makeChunkV3(seed, cx, cy) {
+  const chunk = makeChunkV2(seed, cx, cy);
+  const random = randomGenerator(hash(seed ^ 0x6d3f1a7b, cx + 977, cy - 613));
+  const extra = [];
+  const distanceFromHome = Math.hypot(cx * CHUNK_SIZE, cy * CHUNK_SIZE);
+  const candidates = [
+    ['ironwood', 2, ['deepwood', 'ancient'], 1500],
+    ['geode', 2, ['rocky', 'ancient', 'deepwood'], 2400],
+  ];
+  for (const [type, attempts, biomes, minimumDistance] of candidates) {
+    for (let i = 0; i < attempts; i++) {
+      const x = cx * CHUNK_SIZE + 32 + random() * (CHUNK_SIZE - 64);
+      const y = cy * CHUNK_SIZE + 32 + random() * (CHUNK_SIZE - 64);
+      const variant = random();
+      const gate = random();
+      if (gate > 0.55) continue;
+      if (distanceFromHome < minimumDistance) continue;
+      if (biomes && !biomes.includes(biomeAt(seed, x, y))) continue;
+      if (Math.hypot(x, y) < 235) continue;
+      if (extra.some((entity) => Math.hypot(x - entity.x, y - entity.y) < 90)) continue;
+      if (chunk.entities.some((entity) => Math.hypot(x - entity.x, y - entity.y) < 55)) continue;
+      extra.push({ id: `v3:${cx},${cy}:${i}`, type, x, y, variant, biome: biomeAt(seed, x, y) });
+    }
+  }
+  if (extra.length) chunk.entities = [...chunk.entities, ...extra];
+  const grove = groveSite(seed);
+  if (Math.floor(grove.x / CHUNK_SIZE) === cx && Math.floor(grove.y / CHUNK_SIZE) === cy) {
+    // The grove replaces whatever random landmark this chunk would have had, so
+    // two landmarks can never share one id.
+    chunk.landmarks = [{ ...grove }];
+  }
+  return chunk;
+}
+
 export function makeChunk(seed, cx, cy, generationVersion = 1) {
-  if ((generationVersion ?? 1) >= 2) return makeChunkV2(seed >>> 0, cx, cy);
+  const version = generationVersion ?? 1;
+  if (version >= 3) return makeChunkV3(seed >>> 0, cx, cy);
+  if (version >= 2) return makeChunkV2(seed >>> 0, cx, cy);
   return makeChunkV1(seed >>> 0, cx, cy);
 }
 
@@ -280,6 +341,10 @@ export class World {
     if (this.generationVersion < 2) return 'woodland';
     return biomeAt(this.seed, x, y);
   }
+  /** The long-term destination of this journey, or null for older generations. */
+  grove() {
+    return this.generationVersion >= 3 ? groveSite(this.seed) : null;
+  }
   // The index repairs itself whenever the public structures array changes,
   // because tests and the save system both replace it wholesale.
   structureIndex() {
@@ -312,6 +377,14 @@ export class World {
       }
     }
     return result;
+  }
+  /**
+   * True when a chunk is already generated. Spawners use this to validate a
+   * position without ever generating a chunk: the world only grows where the
+   * player actually walks, which keeps the worst-case frame flat.
+   */
+  isChunkCached(x, y) {
+    return this.chunks.has(`${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)}`);
   }
   getChunk(cx, cy) {
     const key = `${cx},${cy}`;
