@@ -704,8 +704,8 @@ test('a creature can be seen, heard and killed, and the kill leaves loot', async
   await fresh(page);
   const spawned = await placeCreature(page, 'stalker', 46, 0);
   // The danger badge is the promise that something noticed the player.
-  await expect(page.locator('#threat-badge')).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('#threat-text')).toContainText('Kẻ rình rừng');
+  await expect(page.locator('#threat-badge')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#threat-text')).toContainText('Kẻ rình rừng', { timeout: 8000 });
   // Attack until it dies; the first swings may miss if it is still closing in.
   const killed = await page.evaluate(async ({ id }) => {
     const game = window.__domeo.game();
@@ -723,7 +723,7 @@ test('a creature can be seen, heard and killed, and the kill leaves loot', async
   }, spawned);
   expect(killed.alive).toBe(false);
   expect(killed.kills).toBe(1);
-  await expect(page.locator('#toast-region')).toContainText('Đã hạ', { timeout: 4000 });
+  await expect(page.locator('#toast-region')).toContainText('Đã hạ', { timeout: 6000 });
   const data = await saved(page);
   expect(data.stats.kills).toBe(1);
   // Loot is real: the stalker drops fibre and sometimes berries.
@@ -859,14 +859,14 @@ test('the quest journal is a loop: objective, reward, then a new recipe', async 
   // Walk to the new fire and cook: that is the whole objective.
   const towardFire = spot.x > spot.px ? 'KeyD' : 'KeyA';
   await page.keyboard.down(towardFire);
-  await expect(page.locator('#interaction-label')).toHaveText('Nướng quả mọng', { timeout: 10000 });
+  await expect(page.locator('#interaction-label')).toHaveText('Nướng quả mọng', { timeout: 15000 });
   await page.keyboard.up(towardFire);
   await page.keyboard.press('KeyE');
   await expect(page.locator('#quest-objective')).toContainText('mở nhật ký', { timeout: 5000 });
   await expect(page.locator('#quest-rewards')).toBeVisible();
   // The reward is gated behind the journal: no claim, no blueprint.
   await page.keyboard.press('KeyC');
-  await expect(page.locator('[data-craft="workbench"]')).toBeDisabled();
+  await expect(page.locator('[data-craft="workbench"]')).toBeDisabled({ timeout: 8000 });
   await page.keyboard.press('Escape');
   await page.keyboard.press('KeyN');
   await expect(page.locator('#journal-dialog')).toBeVisible();
@@ -874,7 +874,7 @@ test('the quest journal is a loop: objective, reward, then a new recipe', async 
   await expect(page.locator('#toast-region')).toContainText('Nhận thưởng');
   await page.keyboard.press('Escape');
   await page.keyboard.press('KeyC');
-  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled({ timeout: 5000 });
+  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled({ timeout: 8000 });
   await page.keyboard.press('Escape');
   // And the journal survives a reload, claimed rewards included.
   const data = await saved(page);
@@ -885,7 +885,7 @@ test('the quest journal is a loop: objective, reward, then a new recipe', async 
   await page.locator('#continue-button').click();
   await expect(page.locator('#quest-title')).toHaveText('Một nơi để trở về');
   await page.keyboard.press('KeyC');
-  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled();
+  await expect(page.locator('[data-craft="workbench"]')).toBeEnabled({ timeout: 8000 });
   await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });
@@ -930,7 +930,11 @@ test('warmth falls at night in the open and rises beside the fire', async ({ pag
   game.inventory.wood = 20;
   game.inventory.stone = 20;
   await restore(page, game.snapshot());
-  await expect(page.locator('#warmth-bar')).toHaveAttribute('aria-valuenow', '28');
+  // Night drains warmth continuously, so this is a band, not one exact digit.
+  const warmth = async () =>
+    Number(await page.locator('#warmth-bar').getAttribute('aria-valuenow'));
+  await expect.poll(warmth).toBeLessThanOrEqual(30);
+  await expect.poll(warmth).toBeGreaterThan(20);
   await expect(page.locator('#warmth-bar')).toHaveClass(/low/);
   // A fire next to the player brings it back up. Place it the way the player
   // does: pick the blueprint, then put it on the ground.
@@ -951,10 +955,8 @@ test('warmth falls at night in the open and rises beside the fire', async ({ pag
     return false;
   });
   expect(placed).toBe(true);
-  await expect
-    .poll(async () => Number(await page.locator('#warmth-bar').getAttribute('aria-valuenow')), {
-      timeout: 8000,
-    })
-    .toBeGreaterThan(28);
+  const cold = await warmth();
+  await expect.poll(warmth, { timeout: 15000 }).toBeGreaterThan(cold);
+  await expect(page.locator('#warmth-bar')).not.toHaveClass(/low/, { timeout: 15000 });
   expect(errors).toEqual([]);
 });

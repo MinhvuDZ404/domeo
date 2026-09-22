@@ -204,6 +204,7 @@ function startJourney(data = null) {
   ui.lastGoalSignature = '';
   ui.lastQuestSignature = '';
   ui.lastCampSignature = '';
+  ui.lastJournalSignature = '';
   sound.setDanger(0);
   setMode('playing');
   ui.render(game, game.getTarget());

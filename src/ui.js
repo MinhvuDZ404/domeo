@@ -359,7 +359,7 @@ export class UI {
       if (footer.textContent !== text) footer.textContent = text;
     }
     if ($('inventory-dialog').open) this.renderInventory(game);
-    if ($('journal-dialog').open) this.renderJournal(game);
+    if ($('journal-dialog').open && this.journalChanged(game)) this.renderJournal(game);
   }
   // ---- 5.1: quests, camp and danger ---------------------------------------
   /**
@@ -472,9 +472,36 @@ export class UI {
     badge.classList.toggle('danger', level > 0.7);
   }
   // The full journal: every quest the player can see, grouped, with rewards.
+  /**
+   * Whether the journal would read differently than the last time it was drawn.
+   * The dialog is open for as long as the player is reading it, so rebuilding it
+   * on every UI tick would churn the DOM (and any click target inside it) for no
+   * reason at all.
+   */
+  journalChanged(game) {
+    if (!game.quests) return false;
+    const signature =
+      `${game.quests.claimedCount()}:${game.stats.quests}:${game.journeyComplete ? 1 : 0}:` +
+      game.quests.defs
+        .map(
+          (quest) =>
+            `${quest.id}:${game.quests.status(quest.id)}:` +
+            game.quests
+              .progressOf(quest)
+              .map((objective) => objective.value)
+              .join(','),
+        )
+        .join('|');
+    if (signature === this.lastJournalSignature) return false;
+    this.lastJournalSignature = signature;
+    return true;
+  }
   renderJournal(game) {
     const list = $('journal-list');
     if (!list || !game.quests) return;
+    // Keep the signature in step: claiming from the journal draws it directly,
+    // so the next tick must not immediately rebuild the same card again.
+    this.journalChanged(game);
     const visible = game.quests.defs.filter((quest) => game.quests.status(quest.id) !== 'locked');
     const claimed = game.quests.claimedCount();
     $('journal-summary').textContent =
