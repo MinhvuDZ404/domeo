@@ -303,6 +303,71 @@ test('threat rises only for creatures that noticed the player', () => {
   assert.ok(chasing <= 1);
 });
 
+test('a fence between a swing and the player is a miss; an open swing is not', () => {
+  const open = new Game(6);
+  const exposed = open.enemies.spawn('stalker', open.player.x + 28, open.player.y);
+  open.enemies.executeAttack(exposed);
+  assert.ok(open.player.health < 100, 'an open swing must connect');
+
+  const blocked = new Game(6);
+  const enemy = blocked.enemies.spawn('stalker', blocked.player.x + 36, blocked.player.y);
+  blocked.world.structures.push({
+    id: 'built:0',
+    type: 'wall',
+    x: blocked.player.x + 18,
+    y: blocked.player.y,
+  });
+  blocked.enemies.executeAttack(enemy);
+  assert.equal(blocked.player.health, 100, 'a fence on the line must stop the swing');
+});
+
+test('a hit knocks a creature away from the player, not into the swing', () => {
+  const game = new Game(6);
+  const enemy = game.enemies.spawn('stalker', game.player.x + 40, game.player.y);
+  const before = enemy.x;
+  game.enemies.damageEnemy(enemy, 4, {
+    x: game.player.x,
+    y: game.player.y,
+    knockback: 22,
+  });
+  const clear = !game.world.isBlocked(before + 18, enemy.y, game.elapsed, 8);
+  if (clear) assert.ok(enemy.x > before + 8, `knockback moved to ${enemy.x} from ${before}`);
+  else assert.ok(enemy.x >= before - 1, 'a blocked knockback must not pull the creature in');
+});
+
+test('the home fire is a sanctuary for ordinary creatures, not for an elite', () => {
+  const game = new Game(8);
+  game.home = { x: game.player.x, y: game.player.y };
+  const stalker = game.enemies.spawn('stalker', game.player.x + 90, game.player.y);
+  stalker.state = 'chase';
+  stalker.alert = true;
+  for (let i = 0; i < 40; i++) game.enemies.update(0.05);
+  assert.ok(
+    stalker.state === 'return' || stalker.state === 'idle',
+    'a stalker must break off inside the camp',
+  );
+  assert.equal(game.player.health, 100);
+
+  const keeper = game.enemies.spawn('groveKeeper', game.player.x + 36, game.player.y);
+  let hurt = false;
+  for (let i = 0; i < 500 && !hurt; i++) {
+    game.enemies.update(0.05);
+    if (game.player.health < 100) hurt = true;
+  }
+  assert.equal(hurt, true, 'the grove keeper is not turned away by a campfire');
+});
+
+test('a dodge that actually avoids a blow is reported once', () => {
+  const game = new Game(4);
+  const enemy = game.enemies.spawn('stalker', game.player.x + 20, game.player.y);
+  assert.equal(game.dodge({ x: 1, y: 0 }), true);
+  game.drainEvents();
+  assert.equal(game.enemies.damagePlayer(12, enemy), false);
+  assert.equal(game.enemies.damagePlayer(12, enemy), false);
+  const evaded = game.drainEvents().filter((event) => event.type === 'evaded');
+  assert.equal(evaded.length, 1);
+});
+
 test('combat never breaks the world limits: dead creatures are reused, not leaked', () => {
   const game = new Game(31);
   const director = game.enemies;

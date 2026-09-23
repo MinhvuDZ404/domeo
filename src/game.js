@@ -77,6 +77,38 @@ import { getWorldEvent } from './events.js';
 
 const DIRECTIONS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
+// Foods the inventory, the hotbar and the touch button are all allowed to use.
+// Keeping the list here stops a new recipe from being craftable but inedible.
+export const CONSUMABLES = ['berry', 'cooked', 'mushroom', 'salve', 'meal', 'tea'];
+export const isConsumable = (id) => CONSUMABLES.includes(id);
+
+/**
+ * Death is a lesson, not a fade-to-black. The lead names what happened; the
+ * detail names the preparation that would have changed it.
+ */
+export function deathReport(cause = '') {
+  if (cause === 'đói')
+    return {
+      lead: 'Bạn đói quá lâu.',
+      detail: 'Mang theo quả hoặc một bữa đã nướng trước khi đi xa. Đói rút máu liên tục.',
+    };
+  if (cause === 'lạnh')
+    return {
+      lead: 'Hơi ấm đã cạn.',
+      detail: 'Đêm, mưa và sương lấy hơi ấm. Lửa nhà, lều hoặc một cây đuốc giữ bạn sống.',
+    };
+  if (cause && cause !== 'kiệt sức' && cause !== 'vết thương')
+    return {
+      lead: `${cause} đã hạ bạn.`,
+      detail:
+        'Chúng báo hiệu trước khi đánh. Lăn tránh, hoặc lùi khỏi vòng sáng. Lửa nhà khiến hầu hết sinh vật bỏ cuộc — trừ kẻ giữ rừng cổ.',
+    };
+  return {
+    lead: 'Bạn đã kiệt sức.',
+    detail: 'Khu rừng vẫn còn đó. Tỉnh dậy bên lửa và chuẩn bị kỹ hơn cho lần sau.',
+  };
+}
+
 // Event types that carry a world consequence (loot, quests, flags).
 const COMBAT_EVENTS = new Set([
   'enemyDeath',
@@ -117,6 +149,9 @@ export class Game {
     this.events = [];
     this.dead = false;
     this.deathCause = '';
+    this.pendingCause = '';
+    // One-time lessons. Optional on the save: a missing or edited field is ignored.
+    this.hints = { combat: false, cold: false, hunger: false };
     this.pruneAt = 1;
     this.home = null;
     this.explored = new Set(['0,0']);
@@ -207,6 +242,14 @@ export class Game {
       return;
     }
     if (type === 'playerHurt') this.stats.deaths = this.stats.deaths; // damage is tracked by health
+    // The first time something notices the player is the combat lesson. Once,
+    // and only once — a save remembers that the lesson was already given.
+    if (type === 'enemyNotice' && !this.hints.combat) {
+      this.hints.combat = true;
+      this.emit('hint', {
+        text: 'Có thứ đã thấy bạn. Space để đánh, Q để lăn tránh — hoặc quay về lửa nhà.',
+      });
+    }
   }
   drainEvents() {
     return this.events.splice(0);
@@ -501,10 +544,16 @@ export class Game {
     }
   }
   // ---- combat -------------------------------------------------------------
+  /** A creature's own name, never its internal id. */
+  threatName(source) {
+    if (!source) return 'vết thương';
+    if (typeof source.name === 'string' && source.name) return source.name;
+    return ENEMIES[source.type]?.name ?? 'vết thương';
+  }
   damagePlayer(amount, source = null) {
     if (this.dead || this.player.health <= 0) return false;
     this.player.health = Math.max(0, this.player.health - amount);
-    if (this.player.health <= 0) this.die(source ? `một ${source.type}` : 'vết thương');
+    if (this.player.health <= 0) this.die(this.threatName(source));
     return true;
   }
   die(cause = 'kiệt sức') {
@@ -523,6 +572,7 @@ export class Game {
    */
   revive() {
     if (!this.dead) return false;
+    const cause = this.deathCause;
     this.dead = false;
     const anchor = this.home ?? { x: 0, y: 0 };
     this.player.x = anchor.x + 18;
@@ -532,8 +582,9 @@ export class Game {
     this.player.warmth = Math.max(45, this.player.warmth);
     this.player.stamina = STAMINA_MAX;
     this.deathCause = '';
+    this.pendingCause = '';
     this.enemies.clearNear(this.player.x, this.player.y, 520);
-    this.emit('revive', { x: this.player.x, y: this.player.y, cause: this.deathCause });
+    this.emit('revive', { x: this.player.x, y: this.player.y, cause });
     return true;
   }
   attack(direction = null) {
@@ -552,6 +603,7 @@ export class Game {
     const damage = Math.max(1, Math.round(weapon.damage * (exhausted ? 0.7 : 1)));
     this.cooldown = weapon.cooldown;
     p.swing = 0.26;
+    p.swingAngle = Math.atan2(unit.y, unit.x);
     const hits = this.enemies.playerAttack({
       direction: unit,
       weapon: { ...weapon, damage },
@@ -584,6 +636,7 @@ export class Game {
     p.dodgeX = aim.x / length;
     p.dodgeY = aim.y / length;
     this.enemies.invulnerableUntil = this.elapsed + DODGE_INVULNERABILITY;
+    this.enemies.dodgeNoted = false;
     this.emit('dodge', { x: p.x, y: p.y, angle: Math.atan2(p.dodgeY, p.dodgeX) });
     return true;
   }
@@ -653,18 +706,19 @@ export class Game {
     return candidates[0] || null;
   }
   getFocus() {
-    // Important interactions win over distant decor: a chest at your feet beats
-    // a berry bush a few steps away, and camp furniture beats far resources.
+    // A chest or an unlit beacon is a decision. Gathering beats resting: rest
+    // spends hunger, so it must never steal the button from a bush at your feet.
     const chest = this.nearChest();
     if (chest) return { kind: 'chest', entity: chest };
     const beacon = this.nearStructure('beacon');
-    if (beacon) return { kind: 'beacon', entity: beacon };
-    const shelter = this.nearStructure('shelter');
-    if (shelter) return { kind: 'shelter', entity: shelter };
+    if (beacon && !this.flags.beaconLit) return { kind: 'beacon', entity: beacon };
     const resource = this.getTarget();
     if (resource) return { kind: 'resource', entity: resource };
+    if (beacon) return { kind: 'beacon', entity: beacon };
     const fire = this.nearCampfire(INTERACTION_DISTANCE);
     if (fire) return { kind: 'campfire', entity: fire };
+    const shelter = this.nearStructure('shelter');
+    if (shelter) return { kind: 'shelter', entity: shelter };
     return null;
   }
   interact() {
@@ -879,7 +933,13 @@ export class Game {
     this.inventory[id]++;
     this.stats.crafted++;
     if (id === 'torch') this.torchLit = true;
-    this.emit('craft', { item: id, text: `Đã chế tạo ${ITEMS[id].name.toLowerCase()}` });
+    const fromBag = PLACEABLE.includes(id) && !['campfire', 'wall', 'chest'].includes(id);
+    this.emit('craft', {
+      item: id,
+      text: fromBag
+        ? `Đã chế tạo ${ITEMS[id].name.toLowerCase()}. Mở túi đồ và chọn “Mang ra đặt”.`
+        : `Đã chế tạo ${ITEMS[id].name.toLowerCase()}`,
+    });
     this.reportQuest('craft', id, 1);
     return true;
   }
@@ -987,7 +1047,15 @@ export class Game {
     const campComfort = this.passive('camp_comfort') && camp.inside ? 0.88 : 1;
     const hungerScale = camp.bonuses.hungerDrain * campComfort;
     p.hunger = Math.max(0, p.hunger - dt * HUNGER_DRAIN_PER_SECOND * hungerScale);
-    if (p.hunger <= 0) p.health = Math.max(0, p.health - dt * STARVATION_DAMAGE_PER_SECOND);
+    if (p.hunger <= 0) {
+      const before = p.health;
+      p.health = Math.max(0, p.health - dt * STARVATION_DAMAGE_PER_SECOND);
+      if (before > 0 && p.health <= 0) this.pendingCause = 'đói';
+    }
+    if (p.hunger < 28 && !this.hints.hunger && this.elapsed > 8) {
+      this.hints.hunger = true;
+      this.emit('hint', { text: 'Bụng đang đói. Ăn một quả (phím F) trước khi đi tiếp.' });
+    }
     if (camp.nearFire && p.hunger > FIRE_MIN_HUNGER)
       p.health = Math.min(100, p.health + dt * CAMPFIRE_HEAL_PER_SECOND);
     if (this.passive('sanctuary') && camp.nearShrine) p.health = Math.min(100, p.health + dt * 1.6);
@@ -1014,8 +1082,14 @@ export class Game {
     if (this.passive('sanctuary') && camp.nearShrine)
       p.warmth = Math.min(WARMTH_MAX, p.warmth + dt * 1.2);
     if (p.warmth < WARMTH_COLD_THRESHOLD) {
+      const before = p.health;
       const severity = 1 - p.warmth / WARMTH_COLD_THRESHOLD;
       p.health = Math.max(0, p.health - dt * WARMTH_COLD_HEALTH * severity);
+      if (before > 0 && p.health <= 0 && !this.pendingCause) this.pendingCause = 'lạnh';
+    }
+    if (p.warmth < 32 && !this.hints.cold && this.elapsed > 8) {
+      this.hints.cold = true;
+      this.emit('hint', { text: 'Bạn đang lạnh. Lửa, lều hoặc đuốc sẽ sưởi ấm.' });
     }
     // Stamina regenerates whenever the player is not spending it.
     const sprinting = this.sprinting && (this.movementX || this.movementY);
@@ -1039,15 +1113,32 @@ export class Game {
       this.campAt = this.elapsed + 0.25;
     }
     this.updateSurvival(dt);
-    const night = getDayInfo(this.elapsed).isNight;
+    const day = getDayInfo(this.elapsed);
+    const night = day.isNight;
     if (night && !this.wasNight) {
       this.stats.nights += 1;
       if (this.home && Math.hypot(p.x - this.home.x, p.y - this.home.y) > 500)
         this.reportQuest('nightsAway', 'any', 1);
+      this.emit('nightfall', { text: this.nightfallText() });
+    } else if (!night && this.wasNight && this.elapsed > 30) {
+      this.emit('dawn', { text: 'Bình minh. Bóng đêm tan, khu rừng lại mở lối.' });
+    }
+    // Dusk is the decision, not the punishment: one quiet warning before night.
+    if (!night && day.phase >= 0.44 && day.phase < 0.5 && this.duskDay !== day.day) {
+      this.duskDay = day.day;
+      this.emit('dusk', {
+        text: this.home
+          ? 'Hoàng hôn đang buông. La bàn còn nhớ đường về nhà.'
+          : 'Hoàng hôn đang buông. Một lửa trại sẽ là chỗ để quay về khi trời tối.',
+      });
     }
     this.wasNight = night;
+    this.noteWorld();
     if (p.health <= 0) {
-      this.die(this.deathCause || (this.player.hunger <= 0 ? 'đói' : 'kiệt sức'));
+      this.die(
+        this.pendingCause ||
+          (p.hunger <= 0 ? 'đói' : p.warmth < WARMTH_COLD_THRESHOLD ? 'lạnh' : 'kiệt sức'),
+      );
       return;
     }
     let { x: dx, y: dy } = movement;
@@ -1099,11 +1190,33 @@ export class Game {
     this.trackTravel();
     this.updateEncounter();
     this.enemies.update(dt);
+    if (this.dead) return;
     if (this.openChest && !this.nearChest()) this.openChest = false;
     if (this.elapsed >= this.pruneAt) {
       this.world.prune(this.elapsed);
       this.pruneAt = this.elapsed + 1;
     }
+  }
+  nightfallText() {
+    const away =
+      this.home &&
+      Math.hypot(this.player.x - this.home.x, this.player.y - this.home.y) > CAMP_RADIUS;
+    if (!this.home) return 'Đêm đã xuống. Một lửa trại sẽ là chỗ để quay về — và để sưởi ấm.';
+    if (away) return 'Đêm đã xuống. La bàn chỉ về nhà. Trong trại, rừng không săn bạn.';
+    return 'Đêm đã xuống. Lửa nhà đang giữ bạn. Ra ngoài là một lựa chọn.';
+  }
+  /**
+   * World moods are announced once per band. A save loaded in the middle of one
+   * does not repeat the toast — the band is already the weather, not news.
+   */
+  noteWorld() {
+    const event = this.worldEvent();
+    const id = event?.id ?? '';
+    if (id === this.seenEvent) return;
+    const first = this.seenEvent === undefined;
+    this.seenEvent = id;
+    if (!event || (first && event.progress > 0.08)) return;
+    this.emit('worldMood', { text: `${event.label}. ${event.note}` });
   }
   /** Biome variety and longest distance travelled drive several objectives. */
   trackTravel() {
@@ -1225,6 +1338,7 @@ export class Game {
       quests: this.quests.serialize(),
       flags: { ...this.flags },
       journeyComplete: this.journeyComplete,
+      hints: { ...this.hints },
       world: this.world.serialize(this.elapsed),
     };
   }
@@ -1265,6 +1379,11 @@ export class Game {
       ...(data.flags && typeof data.flags === 'object' ? data.flags : {}),
     };
     game.journeyComplete = !!data.journeyComplete || game.quests.journeyComplete();
+    game.hints = { combat: false, cold: false, hunger: false };
+    if (data.hints && typeof data.hints === 'object') {
+      for (const key of ['combat', 'cold', 'hunger'])
+        if (data.hints[key] === true) game.hints[key] = true;
+    }
     game.biomes = new Set([game.biome()]);
     game.maxDistance = Math.hypot(game.player.x, game.player.y);
     game.campInfo = null;

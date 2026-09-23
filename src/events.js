@@ -4,7 +4,8 @@
 // always sees the same weather-like moods at the same moments, and a reload in
 // the middle of one simply carries on. Events are transient by design: they are
 // never written to the save, and none of them hands out a permanent reward that
-// could be farmed by re-entering the band (see docs/RELEASE-5.1.md).
+// could be farmed by re-entering the band. Crystal bonuses apply per gather, not
+// as a stored stack.
 import { clamp } from './config.js';
 
 export const EVENT_BAND = 300; // 5 simulated minutes: five bands in a 24-minute day.

@@ -3,6 +3,49 @@
 Mọi thay đổi đáng chú ý của Domeo được ghi ở đây. Game hiển thị phiên bản trong mục **Cài đặt**
 (phím `O`, phần cuối hộp thoại) và ở `src/config.js`.
 
+## 5.1.1 — 23/09/2026
+
+Bản chỉnh nhịp cho 5.1: đêm vẫn nguy hiểm, nhưng người chơi đọc được nguy hiểm đó và có một chỗ để
+quay về. Không đổi `SAVE_VERSION` (vẫn 4), không đổi `DAY_LENGTH` (1440), không đổi khóa
+`localStorage`.
+
+### Đã sửa
+
+- Công trình không có phím tắt (lều, bàn chế tác, bàn bản đồ, đèn hiệu, ghế, bồn hoa, đá đứng) đặt
+  được từ túi đồ. Trước đó nút “Mang ra đặt” chỉ nhận lửa, hàng rào, rương và đèn lồng.
+- Bữa ăn, trà và cao dán dùng được từ túi đồ, không chỉ quả mọng.
+- Đòn đánh của sinh vật không xuyên thân cây hay hàng rào, trừ đòn áp sát và đòn dậm đất. Bị đánh
+  thì bị đẩy ra xa, không bị kéo vào nhát chém.
+- Trong vòng lửa nhà, sinh vật thường bỏ cuộc. Một nhát đã vung vẫn trúng. Người giữ rừng cổ không
+  bị lửa nhà đuổi đi.
+- Vòng báo đòn của nấm phun bào tử không còn là một đĩa lớn bằng tầm bắn. Đêm vẽ lại mắt, vòng báo
+  và viên đạn lên trên lớp tối, kèm một vũng sáng nhỏ quanh sinh vật đã thấy bạn.
+- Nhát chém của người chơi theo hướng ngắm, không chỉ theo hướng mặt.
+- Chết ghi đúng tên: đói, lạnh, hoặc tên sinh vật. Màn hình kết thúc nói vì sao và cách chuẩn bị
+  khác đi. Tỉnh dậy vẫn giữ hành trình.
+
+### Nhịp chơi
+
+- Hoàng hôn và đêm mỗi ngày được nhắc một lần, kèm đường về nhà nếu đã có lửa.
+- Lần đầu bị đói, lạnh, hoặc bị sinh vật thấy được nhắc một lần. Bản lưu nhớ các lời nhắc đó
+  (`hints`, trường tùy chọn — bản lưu cũ không có trường này vẫn nạp được).
+- Công thức bị khoá hoặc cần chỗ đứng nói rõ lý do, thay vì chỉ một nút tắt.
+- Nghỉ ở lều hiện thời gian chờ còn lại.
+- Trại cấp cao hơn có vòng đất ấm và vài viên đá đường. Lửa nhà sáng rộng hơn một chút.
+- Trên màn hình cảm ứng, thẻ trại không còn đè lên cần điều khiển. Nút đánh và lăn rộng hơn.
+
+### Đã đo, và chưa đo
+
+- `npm test`: 152/152, Node v22.22.3.
+- `node scripts/perf.mjs --check`: đạt ngân sách. Mô phỏng mean 0,134 ms, p95 0,302 ms, worst* 4,173
+  ms (ngân sách p95 < 2,5 ms, worst* < 8 ms). World query p95 0,261 ms. Một lần chạy, không phải
+  FPS trình duyệt. Phần vẽ chưa được đo.
+- `node scripts/balance.mjs --write`, 5 seed, tối đa 20 phút trong game: bot có chuẩn bị 4/5 sống
+  tới ngày 2 (1/5 chết vì bị săn lúc 2:07, khi đang xa nhà). Bot không hái lượm 5/5 chết, trung vị
+  9:09, trong đó 1 bị săn và 4 vì lạnh. Đêm vẫn kết thúc một chuyến đi không chuẩn bị.
+- `npm run test:e2e` không chạy: môi trường này không có Chromium. CI trên GitHub cũng chưa được
+  chạy lại từ nhánh này.
+
 ## 5.0.0 — 21/09/2026
 
 Bản **Khu rừng đáng đi xa**: vùng sinh thái, địa danh, hái lượm mở rộng và một ngày dài 24 phút.

@@ -44,6 +44,11 @@ test('every icon name used by the markup or scripts exists', () => {
   assert.ok(known.size > 20);
 });
 
+test('every placeable and every food can be used from the inventory action', () => {
+  assert.match(main, /PLACEABLE\.includes\(id\)/);
+  assert.match(main, /isConsumable\(id\)/);
+});
+
 test('hotbar slots and crafting recipes only reference real items', () => {
   const slots = [...html.matchAll(/data-slot="([^"]+)"/g)].map((match) => match[1]);
   assert.ok(slots.length >= 6);

@@ -1,3 +1,26 @@
+# Hiệu năng Domeo
+
+## Bản 5.1.1: một lần đo logic, không phải FPS thiết bị
+
+`node scripts/perf.mjs --check` trên Node v22.22.3, một lần, cùng script với CI. Đây là thời gian
+mô phỏng trong Node, **không** phải khung hình trình duyệt và **không** phải số đo trên điện thoại.
+
+| Khối lượng việc   | 5.1.1 (một lần) | Ngân sách |
+| ----------------- | --------------- | --------- |
+| simulation mean   | 0,134 ms        | —         |
+| simulation p50    | 0,102 ms        | —         |
+| simulation p95    | 0,302 ms        | < 2,5 ms  |
+| simulation worst* | 4,173 ms        | < 8 ms    |
+| worldQuery mean   | 0,109 ms        | —         |
+| worldQuery p95    | 0,261 ms        | < 1,2 ms  |
+| worldQuery worst* | 0,885 ms        | —         |
+
+\* worst frame sau khi bỏ tối đa 3 mẫu chậm nhất, đúng cách script tính ngân sách. Cold start 40
+khung đầu không nằm trong ngân sách: max 5,309 ms. Ngân sách đều đạt. Mean mô phỏng cao hơn số 5.0
+(0,045 ms) vì `Game.update()` giờ còn chạy đạo diễn sinh vật; p95 vẫn nằm sâu trong ngân sách.
+
+Phần vẽ (lớp tối, vòng báo đòn, mắt sinh vật vẽ lại ban đêm) **chưa được đo** bằng script này.
+
 # Hiệu năng Domeo 5.0
 
 Mục tiêu hiệu năng của Domeo không phải "nhanh hơn bằng mọi giá", mà là: **mỗi khung hình không
