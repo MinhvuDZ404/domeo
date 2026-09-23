@@ -4,12 +4,30 @@ Game sinh tồn 2D góc nhìn từ trên xuống, viết bằng **JavaScript thu
 
 Trang GitHub Pages của dự án: <https://minhvudz404.github.io/domeo/>. Các thay đổi mới chỉ xuất hiện trên trang này sau khi nhánh dùng để triển khai được cập nhật.
 
+## Có gì trong bản 5.1?
+
+Domeo 5.1 vẫn là một chuyến đi hoang dã: hái lượm, chuẩn bị, sống sót, tìm địa danh, dựng trại, rồi
+đi sâu hơn. Ngày trong game vẫn dài đúng **24 phút**. Bản này thêm nhịp của khu rừng — sinh vật có
+báo trước, đêm săn người đi lạc, và một trại thực sự đáng quay về.
+
+- **Sinh vật:** kẻ rình, đá canh, nấm phun bào tử, bóng đêm, và người giữ rừng cổ. Chúng gầm/báo
+  trước khi đánh. Lăn tránh (Q) né đòn. Trong vòng lửa nhà, sinh vật thường bỏ cuộc; người giữ rừng
+  cổ thì không.
+- **Trại:** lửa, lều, bàn chế tác, bàn bản đồ, đèn hiệu. Công trình không có phím tắt thì mở túi đồ
+  và chọn “Mang ra đặt”.
+- **Sinh tồn thêm:** hơi ấm, sức bền, bữa ăn, trà. Đói và lạnh nói rõ tên khi hạ bạn. Chết là một
+  bước lùi: tỉnh dậy ở nhà, giữ đồ và nhật ký.
+- **Nhật ký:** nhiệm vụ dẫn từ lửa nhà tới rừng cổ. Công thức bị khoá nói vì sao chưa chế được.
+
+Hành trình cũ vẫn nạp được (schema bản lưu 4, không đổi khóa `localStorage`, không đổi seed). Thế
+giới mới dùng thuật toán v3. Phiên bản hiển thị là `v5.1` (`5.1.1`). Chi tiết trong `CHANGELOG.md`.
+
 ## Có gì trong bản 5.0?
 
 Bản 5.0 cho bạn **một khu rừng đáng đi xa**: 6 vùng sinh thái, 6 loại địa danh để khám phá, hái lượm
 mở rộng (nấm, thảo mộc, tinh thể), cao dán hồi máu, đèn lồng tinh thể, thời tiết theo seed, và một
 ngày trong game dài đúng **24 phút**. Hành trình cũ từ 2.0/3.0/4.0 vẫn nạp và chơi tiếp được, giữ
-nguyên thế giới cũ. Chi tiết trong `CHANGELOG.md`.
+nguyên thế giới cũ.
 
 ### Nền tảng từ 4.0
 
@@ -54,7 +72,7 @@ Bản bên dưới là nội dung 2.0 đã có sẵn và vẫn đúng:
 - **Điện thoại:** giao diện co giãn, joystick cảm ứng, nút hái lượm/ăn quả, hỗ trợ màn hình dọc và ngang.
 - **Lưu tiến trình:** tự lưu mỗi 15 giây _thời gian chơi_, lưu thủ công và lưu khi ẩn/rời trang. Có xác nhận trước khi thay thế một hành trình còn sống.
 
-Đây là bản chơi đơn tập trung vào khám phá và chế tạo. Chưa có quái vật, chiến đấu, nhà hoàn chỉnh hay đồng bộ nhiều thiết bị.
+Đoạn trên là nền 2.0. Từ 5.1 khu rừng có sinh vật, chiến đấu có báo trước, và một trại để trở về. Vẫn là chơi đơn, không tài khoản, không đồng bộ nhiều thiết bị.
 
 ## Chạy tại máy
 

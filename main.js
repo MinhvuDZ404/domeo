@@ -1,9 +1,9 @@
-import { Game } from './src/game.js';
+import { Game, isConsumable } from './src/game.js';
 import { Renderer } from './src/renderer.js';
 import { Input } from './src/input.js';
 import { UI } from './src/ui.js';
 import { Sound } from './src/sound.js';
-import { GAME_LABEL, GAME_VERSION, ITEMS, getDayInfo } from './src/config.js';
+import { GAME_LABEL, GAME_VERSION, ITEMS, PLACEABLE, getDayInfo } from './src/config.js';
 import {
   readSave,
   writeSave,
@@ -272,10 +272,10 @@ function toMenu() {
 }
 function useItem(id) {
   if (!['playing', 'inventory'].includes(mode)) return;
-  if (id === 'berry' || id === 'cooked' || id === 'mushroom' || id === 'salve') game.eat(id);
+  if (isConsumable(id)) game.eat(id);
   else if (id === 'torch') game.toggleTorch();
   else if (id === 'home') game.setHome();
-  else if (id === 'campfire' || id === 'wall' || id === 'chest' || id === 'lantern') {
+  else if (PLACEABLE.includes(id)) {
     if (game.placement === id && mode === 'playing') game.placement = null;
     else if (game.beginPlacement(id)) {
       ui.closeDialogs();
@@ -413,6 +413,7 @@ function handleEvents() {
         renderer.addBurst('dust', event.x, event.y);
         break;
       case 'enemyHit':
+        renderer.addEffect({ x: event.x, y: event.y - 10, text: `−${event.amount}` });
         renderer.addBurst('hit', event.x, event.y);
         renderer.addShake(0.08);
         break;
@@ -425,8 +426,12 @@ function handleEvents() {
         break;
       }
       case 'playerHurt':
+        renderer.addEffect({ x: event.x, y: event.y - 16, text: `−${event.amount}` });
         renderer.addBurst('blood', event.x, event.y);
         renderer.addShake(0.42);
+        break;
+      case 'evaded':
+        renderer.addEffect({ x: event.x, y: event.y - 18, text: 'Né' });
         break;
       case 'enemyTelegraph':
         renderer.addShake(0.06);

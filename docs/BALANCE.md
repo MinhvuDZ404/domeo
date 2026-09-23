@@ -15,7 +15,9 @@ căn cứ thay vì cảm tính. Số liệu do `scripts/balance.mjs` sinh ra t�
   đo được "một người chơi biết chuẩn bị" khác gì "một người đi lang thang lúc nửa đêm" — chứ không
   chỉ đo xem bot có may mắn không.
 - Kết quả cuối mỗi hành trình có thêm **nguyên nhân kết thúc**: bị săn, vì đói, vì lạnh. Ba nguyên
-  nhân này cần cách xử lý khác nhau, nên gộp chung vào một chữ "kiệt sức" là mất thông tin.
+  nhân này cần cách xử lý khác nhau, nên gộp chung vào một chữ "kiệt sức" là mất thông tin. Từ
+  5.1.1, nguyên nhân lấy từ `game.deathCause` (tên sinh vật, `đói`, hoặc `lạnh`). Lạnh có thể hạ
+  bạn khi hơi ấm còn trên 1, nên bảng không còn đoán theo ngưỡng hơi ấm bằng 0.
 - Mỗi bước thời gian là 0,05 giây, đúng bằng nhịp cập nhật của game (20 bước/giây).
 - Kịch bản B mô phỏng người chơi chỉ đi dạo và ăn 3 quả ban đầu, để biết một phiên thư giãn có
   bao nhiêu khoảng lùi trước khi kiệt sức. Từ 5.0, bot đi dạo có thể nhặt quà khi tình cờ đi ngang
@@ -31,30 +33,30 @@ căn cứ thay vì cảm tính. Số liệu do `scripts/balance.mjs` sinh ra t�
 
 | Mốc                                 | Số lần đạt | Trung vị | Nhanh nhất | Chậm nhất |
 | ----------------------------------- | ---------- | -------- | ---------- | --------- |
-| Hái quả đầu tiên                    | 5/5        | 1:17     | 0:03       | 2:31      |
+| Hái quả đầu tiên                    | 4/5        | 1:06     | 0:03       | 1:28      |
 | Chế tạo rìu                         | 5/5        | 0:01     | 0:01       | 0:02      |
 | Chế tạo cuốc                        | 5/5        | 0:08     | 0:04       | 0:16      |
 | Chế tạo lửa trại                    | 5/5        | 0:20     | 0:11       | 0:23      |
 | Dựng lửa trại                       | 5/5        | 0:20     | 0:11       | 0:23      |
 | Hái nấm/thảo dược/tinh thể đầu tiên | 5/5        | 0:15     | 0:09       | 0:28      |
 | Chế tạo cao thảo dược               | 5/5        | 0:34     | 0:24       | 1:22      |
-| Khám phá địa danh đầu tiên          | 4/5        | 2:47     | 0:34       | 5:02      |
-| Đêm đầu tiên buông xuống            | 5/5        | 7:12     | 7:12       | 7:12      |
-| Sang ngày thứ hai                   | 5/5        | 19:12    | 19:12      | 19:12     |
+| Khám phá địa danh đầu tiên          | 4/5        | 1:40     | 0:34       | 3:26      |
+| Đêm đầu tiên buông xuống            | 4/5        | 7:12     | 7:12       | 7:12      |
+| Sang ngày thứ hai                   | 4/5        | 19:12    | 19:12      | 19:12     |
 
 | Kết quả cuối mỗi hành trình          | Trung vị  | Nhỏ nhất | Lớn nhất |
 | ------------------------------------ | --------- | -------- | -------- |
-| Thời gian chơi mô phỏng              | 19:12     | 19:12    | 19:12    |
-| Quãng đường                          | 50800 px  | 18096 px | 61029 px |
-| Sức khỏe còn lại                     | 100       | 97       | 100      |
-| Độ no còn lại                        | 68        | 68       | 73       |
-| Số lần kẹt vật cản                   | 4         | 2        | 18       |
-| Địa danh đã khám phá                 | 2         | 0        | 4        |
-| Sinh vật đã hạ gục                   | 6         | 1        | 8        |
+| Thời gian chơi mô phỏng              | 19:12     | 2:07     | 19:12    |
+| Quãng đường                          | 41368 px  | 16231 px | 64271 px |
+| Sức khỏe còn lại                     | 100       | 0        | 100      |
+| Độ no còn lại                        | 73        | 73       | 86       |
+| Số lần kẹt vật cản                   | 3         | 0        | 19       |
+| Địa danh đã khám phá                 | 1         | 0        | 4        |
+| Sinh vật đã hạ gục                   | 3         | 0        | 5        |
 | Hơi ấm còn lại                       | 100       | 100      | 100      |
-| Cao dán đã dùng                      | 3         | 0        | 4        |
-| Hành trình kết thúc vì kiệt sức      | 0/5       |          |          |
-| … trong đó bị săn / vì đói / vì lạnh | 0 / 0 / 0 |          |          |
+| Cao dán đã dùng                      | 1         | 0        | 4        |
+| Hành trình kết thúc vì kiệt sức      | 1/5       |          |          |
+| … trong đó bị săn / vì đói / vì lạnh | 1 / 0 / 0 |          |          |
 
 ### Kịch bản B — người chơi không hái lượm
 
@@ -62,11 +64,11 @@ Không thu thập gì thêm, chỉ đi dạo và ăn 3 quả ban đầu (có th�
 
 | Kết quả                              | Trung vị  | Nhỏ nhất | Lớn nhất |
 | ------------------------------------ | --------- | -------- | -------- |
-| Thời điểm kiệt sức                   | 8:16      | 6:21     | 8:46     |
+| Thời điểm kiệt sức                   | 9:09      | 7:11     | 9:25     |
 | Số hành trình kiệt sức               | 5/5       |          |          |
 | Quả đã ăn                            | 1         | 0        | 1        |
-| Địa danh tình cờ đi ngang            | 1         | 1        | 3        |
-| … trong đó bị săn / vì đói / vì lạnh | 5 / 0 / 0 |          |          |
+| Địa danh tình cờ đi ngang            | 3         | 1        | 4        |
+| … trong đó bị săn / vì đói / vì lạnh | 1 / 0 / 4 |          |          |
 
 Số liệu này dùng chung hằng số với game thật (`src/config.js`), nên khi chỉnh cân bằng hãy chạy lại báo cáo này.
 
@@ -99,7 +101,7 @@ Số liệu này dùng chung hằng số với game thật (`src/config.js`), n�
 | Chạy nhanh tốn                     | 13/giây (×1.4 tốc độ)                                    |
 | Lăn né tốn                         | 24 sức bền, bất tử 0.42 giây                             |
 | Vung vũ khí tốn                    | 6 sức bền                                                |
-| Sinh vật tối đa                    | 10 con cùng lúc, tối đa 10 × 1.6 khoảng ngủ thì biến mất |
+| Sinh vật tối đa                    | 10 con cùng lúc; con nào bị bỏ lại quá xa sẽ tự biến mất |
 | Thời gian bất tử sau khi trúng đòn | 0.85 giây                                                |
 
 <!-- END:BALANCE-RESULTS -->

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Game } from '../src/game.js';
+import { Game, deathReport, isConsumable } from '../src/game.js';
 import { MAX_STACK, MAX_STRUCTURES } from '../src/config.js';
 
 const tick = (game, seconds, movement) => {
@@ -521,6 +521,72 @@ test('dodging needs stamina and refuses politely when there is none', () => {
   assert.equal(game.dodge({ x: 0, y: 1 }), false);
   const denied = game.drainEvents().find((event) => event.type === 'message');
   assert.ok(denied, 'the refusal must be explainable');
+});
+
+test('a forest meal warms you and tea gives the stamina back', () => {
+  const game = new Game(1);
+  Object.assign(game.player, { hunger: 20, health: 40, warmth: 30, stamina: 10 });
+  Object.assign(game.inventory, { meal: 1, tea: 1 });
+  assert.equal(isConsumable('meal'), true);
+  assert.equal(isConsumable('axe'), false);
+  assert.equal(game.eat('meal'), true);
+  assert.ok(game.player.warmth > 30);
+  assert.equal(game.player.hunger, 75);
+  assert.equal(game.eat('tea'), true);
+  assert.equal(game.player.stamina, 100);
+});
+
+test('death names the cause, and waking up still remembers why', () => {
+  const starved = new Game(3);
+  starved.player.hunger = 0;
+  starved.player.health = 0.05;
+  starved.update(0.05, { x: 0, y: 0 });
+  assert.equal(starved.deathCause, 'đói');
+
+  const frozen = new Game(3);
+  frozen.elapsed = 900;
+  frozen.wasNight = true;
+  frozen.player.warmth = 0;
+  frozen.player.hunger = 80;
+  frozen.player.health = 0.02;
+  frozen.update(0.05, { x: 0, y: 0 });
+  assert.equal(frozen.deathCause, 'lạnh');
+
+  const hunted = new Game(3);
+  hunted.damagePlayer(200, { type: 'nightling' });
+  assert.equal(hunted.deathCause, 'Bóng đêm');
+  assert.match(deathReport(hunted.deathCause).lead, /Bóng đêm/);
+  assert.doesNotMatch(deathReport(hunted.deathCause).lead, /nightling/);
+  assert.equal(hunted.revive(), true);
+  const revived = hunted.drainEvents().find((event) => event.type === 'revive');
+  assert.equal(revived.cause, 'Bóng đêm');
+});
+
+test('night is announced once, and a reloaded hint is not repeated', () => {
+  const game = new Game(1);
+  game.home = { x: 0, y: 0 };
+  game.elapsed = 430;
+  game.update(0.05, { x: 0, y: 0 });
+  assert.equal(
+    game.drainEvents().some((event) => event.type === 'nightfall'),
+    false,
+  );
+  game.elapsed = 433;
+  game.update(0.05, { x: 0, y: 0 });
+  const fell = game.drainEvents().filter((event) => event.type === 'nightfall');
+  assert.equal(fell.length, 1);
+  assert.match(fell[0].text, /trại|nhà/);
+  game.update(0.05, { x: 0, y: 0 });
+  assert.equal(
+    game.drainEvents().some((event) => event.type === 'nightfall'),
+    false,
+  );
+  game.hints.combat = true;
+  const restored = Game.restore(game.snapshot());
+  assert.equal(restored.hints.combat, true);
+  const dirty = game.snapshot();
+  dirty.hints = 'edited';
+  assert.equal(Game.restore(dirty).hints.combat, false);
 });
 
 test('dying is a setback, not a wipe: the journey wakes up at home', () => {

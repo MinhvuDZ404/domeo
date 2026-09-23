@@ -21,6 +21,7 @@ import {
   SPAWN_INTERVAL,
   SPAWN_MAX_DISTANCE,
   SPAWN_MIN_DISTANCE,
+  CAMP_RADIUS,
   CAMP_SAFE_RADIUS,
   WORLD_LIMIT,
 } from './config.js';
@@ -334,8 +335,25 @@ export class EnemyDirector {
     return this.time() < this.invulnerableUntil;
   }
   /** Applies damage to the player, honouring dodge/grace i-frames. */
+  /** The home fire is a sanctuary for ordinary creatures. Elites ignore it. */
+  playerInSanctuary() {
+    const camp = this.context.camp?.();
+    if (!camp) return false;
+    const player = this.context.player;
+    return distance(player.x, player.y, camp.x, camp.y) <= CAMP_RADIUS;
+  }
   damagePlayer(amount, source = null) {
-    if (this.invulnerable) return false;
+    if (this.invulnerable) {
+      // A successful dodge should feel different from the quiet grace after a hit.
+      if (this.context.player.dodge > 0 && !this.dodgeNoted) {
+        this.dodgeNoted = true;
+        this.emit('evaded', {
+          x: this.context.player.x,
+          y: this.context.player.y,
+        });
+      }
+      return false;
+    }
     const applied = this.context.damagePlayer(amount, source);
     if (!applied) return false;
     this.invulnerableUntil = this.time() + HIT_INVULNERABILITY;
@@ -365,9 +383,13 @@ export class EnemyDirector {
       elite: enemy.elite,
     });
     if (knockback > 0) {
-      const length = Math.hypot(x - enemy.x, y - enemy.y) || 1;
-      enemy.x += ((x - enemy.x) / length) * knockback;
-      enemy.y += ((y - enemy.y) / length) * knockback;
+      // Push away from the swing, never into it. A trunk still stops the slide.
+      const length = Math.hypot(enemy.x - x, enemy.y - y) || 1;
+      const nx = enemy.x + ((enemy.x - x) / length) * knockback;
+      const ny = enemy.y + ((enemy.y - y) / length) * knockback;
+      const radius = Math.max(8, enemy.config.radius * 0.35);
+      if (!this.context.world.isBlocked(nx, enemy.y, this.time(), radius)) enemy.x = nx;
+      if (!this.context.world.isBlocked(enemy.x, ny, this.time(), radius)) enemy.y = ny;
     }
     // Being hit always wakes an enemy: no silent sniping from the dark.
     if (enemy.health > 0) {
@@ -496,6 +518,24 @@ export class EnemyDirector {
       this.emit('enemyVanish', { id: enemy.id, type: enemy.type, x: enemy.x, y: enemy.y });
       return;
     }
+    // Home is safe on purpose. A committed swing still lands; everything else
+    // loses interest and walks back to where it came from.
+    if (!config.elite && this.playerInSanctuary() && !['windup', 'strike'].includes(enemy.state)) {
+      if (['notice', 'chase', 'recover', 'retreat'].includes(enemy.state))
+        this.setState(enemy, 'return');
+      if (enemy.state === 'return') {
+        const homeLeash = distance(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
+        if (homeLeash < 26) this.setState(enemy, 'idle');
+        return;
+      }
+      enemy.wanderTimer -= ENEMY_AI_INTERVAL;
+      if (enemy.state === 'idle' && enemy.wanderTimer <= 0) {
+        enemy.wanderTimer = 1.4 + enemy.rng() * 3.2;
+        enemy.wanderAngle = enemy.rng() * Math.PI * 2;
+        this.setState(enemy, 'wander');
+      } else if (enemy.state === 'wander' && enemy.wanderTimer <= 0) this.setState(enemy, 'idle');
+      return;
+    }
     // Homesickness: everything eventually walks back to where it came from.
     const leash = distance(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
     if (leash > ENEMY_LEASH_DISTANCE && !['return', 'retreat'].includes(enemy.state)) {
@@ -617,11 +657,41 @@ export class EnemyDirector {
       const nx = enemy.x + vx * dt;
       const ny = enemy.y + vy * dt;
       const radius = Math.max(8, config.radius * 0.45);
-      if (!this.context.world.isBlocked(nx, enemy.y, this.time(), radius)) enemy.x = nx;
-      if (!this.context.world.isBlocked(enemy.x, ny, this.time(), radius)) enemy.y = ny;
+      const blockedX = this.context.world.isBlocked(nx, enemy.y, this.time(), radius);
+      const blockedY = this.context.world.isBlocked(enemy.x, ny, this.time(), radius);
+      if (!blockedX) enemy.x = nx;
+      if (!blockedY) enemy.y = ny;
+      // A trunk should turn a creature, not pin it in place forever.
+      if (blockedX && blockedY && ['chase', 'return', 'retreat', 'wander'].includes(enemy.state)) {
+        const side = enemy.stuckSide ?? (enemy.rng() < 0.5 ? 1 : -1);
+        enemy.stuckSide = side;
+        const px = -vy * side;
+        const py = vx * side;
+        const length = Math.hypot(px, py) || 1;
+        const sx = enemy.x + (px / length) * config.speed * dt;
+        const sy = enemy.y + (py / length) * config.speed * dt;
+        if (!this.context.world.isBlocked(sx, enemy.y, this.time(), radius)) enemy.x = sx;
+        if (!this.context.world.isBlocked(enemy.x, sy, this.time(), radius)) enemy.y = sy;
+        enemy.stuck = (enemy.stuck ?? 0) + dt;
+        if (enemy.stuck > 0.7) {
+          enemy.stuckSide = -side;
+          enemy.stuck = 0;
+        }
+      } else enemy.stuck = 0;
       enemy.facing =
         Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : vy > 0 ? 'down' : 'up';
     }
+  }
+  /** A trunk or fence on the line between a swing and the player. */
+  lineBlocked(enemy, player) {
+    const world = this.context.world;
+    const time = this.time();
+    for (const t of [0.35, 0.65]) {
+      const x = enemy.x + (player.x - enemy.x) * t;
+      const y = enemy.y + (player.y - enemy.y) * t;
+      if (world.isBlocked(x, y, time, 6)) return true;
+    }
+    return false;
   }
   executeAttack(enemy) {
     const config = enemy.config;
@@ -654,7 +724,9 @@ export class EnemyDirector {
     const slam = config.slam?.radius ?? 0;
     const reach = Math.max(config.attackRange, slam);
     const gap = distance(enemy.x, enemy.y, player.x, player.y);
-    const landed = gap <= reach + 12;
+    // A fence or a trunk between you and the swing is a miss. Point-blank and
+    // ground slams still connect: the creature is already on top of you.
+    const landed = gap <= reach + 12 && (slam > 0 || gap < 24 || !this.lineBlocked(enemy, player));
     if (landed) this.damagePlayer(config.damage, enemy);
     this.emit('enemyStrike', {
       id: enemy.id,
@@ -722,6 +794,7 @@ export class EnemyDirector {
     const { player } = this.context;
     let nearest = null;
     let nearestDistance = Infinity;
+    let alerted = null;
     let elite = null;
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
@@ -730,6 +803,17 @@ export class EnemyDirector {
         nearest = enemy;
         nearestDistance = gap;
       }
+      if (
+        ['notice', 'chase', 'windup', 'strike', 'recover'].includes(enemy.state) &&
+        gap < 560 &&
+        (!alerted || gap < alerted.distance)
+      )
+        alerted = {
+          type: enemy.type,
+          name: enemy.name,
+          distance: gap,
+          state: enemy.state,
+        };
       if (enemy.elite && gap < 700 && (!elite || enemy.health > elite.health))
         elite = { name: enemy.name, health: enemy.health, maxHealth: enemy.maxHealth };
     }
@@ -737,8 +821,14 @@ export class EnemyDirector {
       count: this.enemiesActive,
       projectiles: this.projectiles.length,
       nearest: nearest
-        ? { type: nearest.type, name: nearest.name, distance: nearestDistance }
+        ? {
+            type: nearest.type,
+            name: nearest.name,
+            distance: nearestDistance,
+            state: nearest.state,
+          }
         : null,
+      alerted,
       elite,
     };
   }

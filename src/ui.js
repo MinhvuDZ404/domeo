@@ -1,4 +1,5 @@
 import { BIOMES, CHUNK_SIZE, ITEMS, PLACEABLE, RECIPES, RESOURCES, getDayInfo } from './config.js';
+import { deathReport } from './game.js';
 import { MOTION_MODES, QUALITY_MODES, percentToVolume, volumeToPercent } from './settings.js';
 import { CAMP_TIERS } from './camp.js';
 import { PASSIVES, QUESTS, QUEST_GROUPS } from './quests.js';
@@ -49,7 +50,7 @@ export class UI {
       .join('');
     $('recipe-list').innerHTML = RECIPES.map((recipe) => {
       const item = ITEMS[recipe.id];
-      return `<article class="recipe-card" data-recipe="${recipe.id}"><div class="recipe-heading"><div class="recipe-icon">${icon(item.icon, 27)}</div><div><h3>${item.name}</h3><small>${item.kind}</small></div><button data-craft="${recipe.id}" aria-label="Chế tạo ${item.name.toLowerCase()}">Chế tạo</button></div><p>${item.description}</p><div class="recipe-costs">${Object.entries(
+      return `<article class="recipe-card" data-recipe="${recipe.id}"><div class="recipe-heading"><div class="recipe-icon">${icon(item.icon, 27)}</div><div><h3>${item.name}</h3><small>${item.kind}</small></div><button data-craft="${recipe.id}" aria-label="Chế tạo ${item.name.toLowerCase()}">Chế tạo</button></div><p>${item.description}</p><p class="recipe-note" hidden></p><div class="recipe-costs">${Object.entries(
         recipe.costs,
       )
         .map(
@@ -281,9 +282,10 @@ export class UI {
     const locationName = $('location-name');
     if (locationName) {
       const biome = game.biome ? game.biome() : 'woodland';
-      const text = weather
-        ? `${BIOMES[biome]?.name ?? 'Rừng tĩnh lặng'} · ${weather.label}`
-        : (BIOMES[biome]?.name ?? 'Rừng tĩnh lặng');
+      const event = game.worldEvent ? game.worldEvent() : null;
+      const text = [BIOMES[biome]?.name ?? 'Rừng tĩnh lặng', weather?.label, event?.label]
+        .filter(Boolean)
+        .join(' · ');
       if (locationName.textContent !== text) locationName.textContent = text;
     }
     document.querySelectorAll('[data-count]').forEach((el) => {
@@ -324,10 +326,13 @@ export class UI {
         !game.flags?.beaconLit && !game.inventory.ancientSeed,
       );
     } else if (focus?.kind === 'shelter') {
-      const ready = game.restReady !== false;
-      $('interaction-label').textContent = ready ? 'Nghỉ một lát' : 'Chưa mệt tới vậy';
-      $('interaction-detail').textContent = ready ? 'Hồi máu và hơi ấm' : 'Thử lại sau một chút';
-      $('interaction-prompt').classList.remove('warning');
+      const wait = Math.ceil((game.restReadyAt ?? 0) - game.elapsed);
+      const ready = wait <= 0;
+      $('interaction-label').textContent = ready ? 'Nghỉ một lát' : 'Vừa nghỉ rồi';
+      $('interaction-detail').textContent = ready
+        ? 'Hồi máu và hơi ấm'
+        : `Thử lại sau ${wait} giây`;
+      $('interaction-prompt').classList.toggle('warning', !ready);
     } else if (focus?.kind === 'campfire') {
       $('interaction-label').textContent = game.inventory.berry
         ? 'Nướng quả mọng'
@@ -452,18 +457,28 @@ export class UI {
     if (!badge || !game.enemies) return;
     const summary = game.enemies.summary();
     const level = game.enemies.threat ? game.enemies.threat() : 0;
-    const near = summary.nearest && summary.nearest.distance < 420 ? summary.nearest : null;
-    const show = level > 0.25 || !!summary.elite;
+    const near =
+      summary.alerted ??
+      (summary.nearest && summary.nearest.distance < 420 ? summary.nearest : null);
+    const show = level > 0.18 || !!summary.elite || !!summary.alerted;
     if (badge.hidden !== !show) badge.hidden = !show;
     if (!show) {
       // Nothing to say: clear the signature so the badge re-renders next time.
       if (this.lastThreatSignature) this.lastThreatSignature = '';
       return;
     }
+    const verb = {
+      notice: 'đã thấy bạn',
+      chase: 'đang tới',
+      windup: 'sắp đánh',
+      strike: 'đánh',
+      recover: 'vừa đánh',
+      retreat: 'đang lùi',
+    }[near?.state];
     const text = summary.elite
       ? `${summary.elite.name} · ${Math.round(summary.elite.health)}/${summary.elite.maxHealth}`
       : near
-        ? `${near.distance < 200 ? 'Ngay sát' : 'Gần đây'}: ${near.name}`
+        ? `${near.name}${verb ? ` · ${verb}` : ''}`
         : 'Có gì đó đang tới';
     if (text !== this.lastThreatSignature) {
       this.lastThreatSignature = text;
@@ -708,8 +723,30 @@ export class UI {
     for (const recipe of RECIPES) {
       const card = document.querySelector(`[data-recipe="${recipe.id}"]`),
         button = card.querySelector('button');
-      button.disabled = !game.canCraft(recipe.id);
-      button.textContent = recipe.unique && game.inventory[recipe.id] > 0 ? 'Đã có' : 'Chế tạo';
+      const blocked = game.craftBlocked(recipe.id);
+      button.disabled = blocked !== null;
+      button.textContent =
+        recipe.unique && game.inventory[recipe.id] > 0
+          ? 'Đã có'
+          : blocked === 'blueprint'
+            ? 'Chưa học'
+            : blocked?.startsWith('station:')
+              ? 'Cần chỗ'
+              : 'Chế tạo';
+      const note = card.querySelector('.recipe-note');
+      if (note) {
+        const station = recipe.station ? ITEMS[recipe.station]?.name.toLowerCase() : '';
+        const text =
+          blocked === 'blueprint'
+            ? 'Học công thức này từ nhật ký.'
+            : blocked?.startsWith('station:')
+              ? `Đứng gần ${station} để chế.`
+              : recipe.station
+                ? `Chế cạnh ${station}.`
+                : '';
+        if (note.textContent !== text) note.textContent = text;
+        note.hidden = !text;
+      }
       for (const [id, needed] of Object.entries(recipe.costs)) {
         const cost = card.querySelector(`[data-cost="${id}"]`);
         cost.classList.toggle('missing', game.inventory[id] < needed);
@@ -736,6 +773,11 @@ export class UI {
     $('save-button').classList.toggle('saved', ok);
   }
   gameOver(game) {
+    const report = deathReport(game.deathCause);
+    const lead = $('death-lead');
+    const reason = $('death-reason');
+    if (lead) lead.textContent = report.lead;
+    if (reason) reason.textContent = report.detail;
     $('journey-stats').innerHTML =
       `<div><strong>${Math.floor(game.elapsed / 60)}:${String(Math.floor(game.elapsed % 60)).padStart(2, '0')}</strong><span>PHÚT KHÁM PHÁ</span></div><div><strong>${Math.floor(game.stats.distance / 64)}</strong><span>Ô ĐẤT ĐÃ ĐI</span></div><div><strong>${game.stats.crafted}</strong><span>VẬT PHẨM TẠO RA</span></div>`;
     this.openDialog('gameover-dialog');

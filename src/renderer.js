@@ -487,6 +487,9 @@ export class Renderer {
     if (!menu) this.drawEventLayer(game, time, camX, camY);
     this.drawWarmth(game, menu, time);
     if (this.motionEffects) this.drawAtmosphere(game, time, menu);
+    // Eyes, telegraphs and shots are redrawn above the night veil. A creature
+    // the player cannot see is not danger — it is a bug.
+    if (!menu) this.drawThreatOverlay(game, camX, camY, time);
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(-camX, -camY);
@@ -1010,7 +1013,7 @@ export class Renderer {
       this.ctx,
       player.x,
       player.y,
-      angles[player.direction] ?? 0,
+      player.swingAngle ?? angles[player.direction] ?? 0,
       progress,
       weapon?.range ?? 52,
     );
@@ -1028,6 +1031,7 @@ export class Renderer {
     if (event) darkness = Math.max(0, darkness + event.darkness * event.intensity);
     if (!menu && game.passive?.('night_eye')) darkness *= 0.88;
     if (!menu) darkness = Math.max(0, darkness - (this.campGlow ?? 0));
+    this.lastDarkness = darkness;
     if (darkness < 0.02) {
       this.stats.lights = 0;
       return;
@@ -1046,15 +1050,20 @@ export class Renderer {
     };
     const inView = (s) =>
       s.x > view.x && s.x < view.x + view.width && s.y > view.y && s.y < view.y + view.height;
+    const campLevel = game.campState?.().level ?? 0;
+    const home = game.home;
     const fires = game.world.structures
       .filter((s) => s.type === 'campfire' && inView(s))
-      .map((s) => ({
-        x: s.x,
-        y: s.y,
-        radius: 200,
-        strength: 1,
-        distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
-      }));
+      .map((s) => {
+        const atHome = home && Math.hypot(s.x - home.x, s.y - home.y) < 48;
+        return {
+          x: s.x,
+          y: s.y,
+          radius: atHome ? 190 + campLevel * 16 : 200,
+          strength: 1,
+          distance: Math.hypot(s.x - game.player.x, s.y - game.player.y),
+        };
+      });
     const lanterns = game.world.structures
       .filter((s) => s.type === 'lantern' && inView(s))
       .map((s) => ({
@@ -1132,6 +1141,24 @@ export class Renderer {
         .slice(0, this.maxLights)
         .map(({ x, y, radius, strength }) => ({ x, y, radius, strength })),
     ];
+    // A noticed creature carries a small pool of light so its body stays
+    // readable when the torch does not reach it. Capped, and only while alerted.
+    if (!menu && game.enemies && darkness > 0.2) {
+      let shown = 0;
+      const cap = this.quality === 'low' ? 2 : 4;
+      for (const enemy of game.enemies.enemies) {
+        if (shown >= cap || !enemy.alive) continue;
+        if (!['notice', 'chase', 'windup', 'strike', 'recover'].includes(enemy.state)) continue;
+        if (!inView(enemy)) continue;
+        lights.push({
+          x: enemy.x,
+          y: enemy.y - 8,
+          radius: enemy.elite ? 96 : 72,
+          strength: enemy.state === 'windup' ? 0.7 : 0.48,
+        });
+        shown++;
+      }
+    }
     this.stats.lights = lights.length;
     light.globalCompositeOperation = 'destination-out';
     for (const source of lights) {
@@ -1300,7 +1327,7 @@ export class Renderer {
       {
         state: enemy.state,
         facing: enemy.facing,
-        flash: enemy.flash,
+        flash: enemy.damageFlash ?? enemy.flash,
         alert: enemy.alert,
         moving: !!(enemy.vx || enemy.vy),
       },
@@ -1332,8 +1359,9 @@ export class Renderer {
         (width - 2) * ratio,
         enemy.elite ? 4 : 2,
       );
-      if (enemy.flash > 0) {
-        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.5, enemy.flash)})`;
+      const flash = enemy.damageFlash ?? enemy.flash ?? 0;
+      if (flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(0.5, flash)})`;
         ctx.fillRect(Math.round(enemy.x - width / 2), Math.round(y), width, enemy.elite ? 6 : 4);
       }
     }
@@ -1361,14 +1389,23 @@ export class Renderer {
       const config = ENEMIES[enemy.type];
       if (!config) continue;
       const progress = clamp(enemy.stateTime / config.windup, 0, 1);
-      drawTelegraphRing(
-        ctx,
-        enemy.x,
-        enemy.y,
-        config.slam?.radius ?? config.attackRange + 22,
-        progress,
-        !!config.elite,
-      );
+      // A ranged creature's attack range is how far the shot flies, not a circle
+      // the player has to leave. Show a small ring and the aim, not a screen-wide disc.
+      const radius = config.ranged ? 42 : (config.slam?.radius ?? config.attackRange + 18);
+      drawTelegraphRing(ctx, enemy.x, enemy.y, radius, progress, !!config.elite);
+      if (config.ranged && game.player) {
+        const length = Math.hypot(game.player.x - enemy.x, game.player.y - enemy.y) || 1;
+        const aim = 54 + progress * 28;
+        ctx.strokeStyle = `rgba(232,214,150,${0.35 + progress * 0.4})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(enemy.x, enemy.y - 8);
+        ctx.lineTo(
+          enemy.x + ((game.player.x - enemy.x) / length) * aim,
+          enemy.y - 8 + ((game.player.y - enemy.y) / length) * aim,
+        );
+        ctx.stroke();
+      }
     }
   }
   addCombatFx(kind, data) {
@@ -1402,22 +1439,81 @@ export class Renderer {
     const ctx = this.ctx;
     const day = getDayInfo(game.elapsed);
     const night = day.nightFactor;
-    if (!this.campWash || this.campWash.x !== home.x || this.campWash.y !== home.y) {
+    const level = game.campState?.().level ?? 1;
+    if (
+      !this.campWash ||
+      this.campWash.x !== home.x ||
+      this.campWash.y !== home.y ||
+      this.campWash.level !== level
+    ) {
       const gradient = ctx.createRadialGradient(home.x, home.y, 24, home.x, home.y, CAMP_RADIUS);
-      gradient.addColorStop(0, 'rgba(214,186,120,0.16)');
-      gradient.addColorStop(0.6, 'rgba(206,180,124,0.08)');
+      const core = 0.12 + level * 0.025;
+      gradient.addColorStop(0, `rgba(214,186,120,${core.toFixed(3)})`);
+      gradient.addColorStop(0.6, `rgba(206,180,124,${(core * 0.5).toFixed(3)})`);
       gradient.addColorStop(1, 'rgba(206,180,124,0)');
-      this.campWash = { x: home.x, y: home.y, gradient };
+      this.campWash = { x: home.x, y: home.y, level, gradient };
     }
     ctx.save();
-    ctx.globalAlpha = 0.55 + night * 0.45;
+    ctx.globalAlpha = 0.5 + night * 0.4 + level * 0.04;
     ctx.fillStyle = this.campWash.gradient;
     ctx.beginPath();
     ctx.arc(home.x, home.y, CAMP_RADIUS, 0, Math.PI * 2);
     ctx.fill();
+    // A faint ring so the safe ground is readable at night without becoming UI.
+    if (night > 0.35) {
+      ctx.globalAlpha = 0.18 + level * 0.04;
+      ctx.strokeStyle = '#e0c98a';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(home.x, home.y, CAMP_RADIUS - 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Path stones appear as the camp is actually built, not just imagined.
+    if (level >= 2) {
+      ctx.globalAlpha = 0.85;
+      const stones = 4 + level * 2;
+      for (let i = 0; i < stones; i++) {
+        const angle = (i / stones) * Math.PI * 2 + 0.35;
+        const radius = 64 + (i % 3) * 26;
+        ctx.fillStyle = i % 2 ? '#8d7d5c' : '#6d624c';
+        ctx.fillRect(
+          home.x + Math.cos(angle) * radius - 2,
+          home.y + Math.sin(angle) * radius - 1,
+          5,
+          3,
+        );
+      }
+    }
     ctx.restore();
-    // A lit beacon lifts the whole camp out of the dark.
-    this.campGlow = game.flags?.beaconLit ? 0.1 * night + 0.02 : 0;
+    // A lit beacon lifts the whole camp out of the dark. Higher tiers glow a little too.
+    this.campGlow =
+      (game.flags?.beaconLit ? 0.1 : 0.012 * level) * night + (game.flags?.beaconLit ? 0.02 : 0);
+  }
+  /**
+   * Night hides the world on purpose. It must not hide the thing that is about
+   * to hit the player. Drawn after the darkness pass, in world space.
+   */
+  drawThreatOverlay(game, camX, camY, time) {
+    if ((this.lastDarkness ?? 0) < 0.12 || !game.enemies) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.scale(this.zoom, this.zoom);
+    ctx.translate(-camX, -camY);
+    this.drawTelegraphs(game, time);
+    this.drawProjectiles(game, time);
+    for (const enemy of game.enemies.enemies) {
+      if (!enemy.alive) continue;
+      if (!['notice', 'chase', 'windup', 'strike', 'recover', 'retreat'].includes(enemy.state))
+        continue;
+      const alert = enemy.state === 'windup' || enemy.state === 'strike';
+      const y = enemy.y - (ENEMIES[enemy.type]?.radius ?? 20) - 8;
+      ctx.globalAlpha = alert ? 0.95 : 0.72;
+      ctx.fillStyle = alert ? '#ffb089' : '#f3e7b2';
+      ctx.fillRect(enemy.x - 7, y, 3, 3);
+      ctx.fillRect(enemy.x + 4, y, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   // Tree trunks framing the grove, plus the shafts of light between them.
   drawGroveArches(ctx, x, y, time) {

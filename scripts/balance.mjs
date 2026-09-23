@@ -144,6 +144,12 @@ const facing = (x, y) =>
 // and quietly running out of food are different design problems.
 function causeOfDeath(game, lastHurt) {
   if (!game.dead) return null;
+  // Prefer the cause the game itself recorded. Cold can finish you while warmth
+  // is still above 1, and a killing blow is a name, not a recent-hit guess.
+  if (game.deathCause === 'đói') return 'hunger';
+  if (game.deathCause === 'lạnh') return 'cold';
+  if (game.deathCause && game.deathCause !== 'kiệt sức' && game.deathCause !== 'vết thương')
+    return 'creature';
   if (lastHurt && game.elapsed - lastHurt.at <= 4) return 'creature';
   if (game.player.hunger <= 1) return 'hunger';
   if ((game.player.warmth ?? 100) <= 1) return 'cold';

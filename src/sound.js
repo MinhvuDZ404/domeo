@@ -21,6 +21,12 @@ const NOTES = {
   beacon: [349, 466, 587, 698, 880],
   rest: [330, 440],
   rally: [196, 262, 330],
+  nightfall: [220, 196, 165],
+  dawn: [392, 523, 659],
+  dusk: [330, 294],
+  hint: [494, 587],
+  evaded: [740, 880],
+  worldMood: [523, 659, 784],
 };
 const CHIRPS = [
   [1180, 1520],
@@ -51,6 +57,12 @@ const COOLDOWNS = {
   beacon: 800,
   rest: 400,
   rally: 1500,
+  nightfall: 800,
+  dawn: 800,
+  dusk: 800,
+  hint: 600,
+  evaded: 280,
+  worldMood: 800,
 };
 
 export class Sound {
@@ -511,8 +523,17 @@ export class Sound {
       this.noiseBurst(1200, 0.05, 0.05, 0.12);
       return;
     }
-    if (type === 'enemyStrike' || type === 'hit') {
-      this.noiseBurst(type === 'hit' ? 900 : 420, 0.06, 0.07, 0.16);
+    if (type === 'enemyHit' || type === 'hit') {
+      this.noiseBurst(type === 'hit' ? 900 : 860, 0.06, 0.06, 0.18);
+      this.blip(168, 0.01, 0.04, 0.07);
+      return;
+    }
+    if (type === 'enemyStrike' || type === 'projectileHit') {
+      this.noiseBurst(type === 'projectileHit' ? 640 : 420, 0.06, 0.07, 0.16);
+      return;
+    }
+    if (type === 'evaded') {
+      this.glide(640, 880, 0.1, 0.05, 'sine');
       return;
     }
     if (type === 'enemyTelegraph') {

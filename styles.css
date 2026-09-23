@@ -1188,6 +1188,14 @@ h2 {
   line-height: 1.8;
   margin-top: 11px;
 }
+.recipe-note {
+  margin-top: 4px !important;
+  color: #8a6a45;
+  font-style: italic;
+}
+.recipe-note[hidden] {
+  display: none;
+}
 .recipe-costs {
   display: flex;
   gap: 7px;
@@ -2004,6 +2012,16 @@ h2 {
     font-size: 8px;
     color: #a2b298;
   }
+  .recipe-heading button,
+  #item-action,
+  .quest-card .button {
+    min-height: 44px;
+  }
+}
+@media (max-height: 640px) and (max-width: 700px) {
+  .camp-panel {
+    display: none;
+  }
 }
 @media (max-width: 460px) {
   /* Saving still happens automatically and from the pause menu, so the top bar
@@ -2467,9 +2485,39 @@ dialog .toast {
   color: #f6d2c2;
   border-color: #c4876a99;
   background: #5d2a1faa;
+  animation: threat-pulse 1.2s ease-in-out infinite;
+}
+@keyframes threat-pulse {
+  50% {
+    transform: translateX(-50%) scale(1.03);
+  }
 }
 .threat-badge svg {
   flex: none;
+}
+/* Later than the base camp rule, so a phone stick is not covered by the card. */
+@media (pointer: coarse), (max-width: 700px) {
+  .camp-panel {
+    top: 248px;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: auto;
+    width: 150px;
+    padding: 8px 10px;
+  }
+  .camp-list {
+    display: none;
+  }
+  .camp-next {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+@media (max-height: 640px) and (max-width: 700px) {
+  .camp-panel {
+    display: none;
+  }
 }
 
 /* The full journal. */
@@ -2580,6 +2628,8 @@ dialog .toast {
 /* Combat verbs and quest feedback. */
 .touch-attack,
 .touch-dodge {
+  width: 56px;
+  height: 56px;
   background: #7d5a4266;
   border-color: #d6b48a66;
 }
